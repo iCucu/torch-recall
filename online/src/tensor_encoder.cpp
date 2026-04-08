@@ -1,5 +1,6 @@
 #include "torch_recall/tensor_encoder.h"
 #include <stdexcept>
+#include <algorithm>
 
 namespace torch_recall {
 
@@ -7,17 +8,16 @@ static const std::unordered_map<std::string, int64_t> OP_MAP = {
     {"==", 0}, {"<", 1}, {">", 2}, {"<=", 3}, {">=", 4}
 };
 
-QueryTensors encode_dnf(const DNF& dnf, const IndexMetadata& meta) {
-    QueryTensors qt;
-    qt.bitmap_indices = torch::zeros({MAX_BP}, torch::kInt64);
-    qt.bitmap_valid = torch::zeros({MAX_BP}, torch::kBool);
-    qt.numeric_fields = torch::zeros({MAX_NP}, torch::kInt64);
-    qt.numeric_ops = torch::zeros({MAX_NP}, torch::kInt64);
-    qt.numeric_values = torch::zeros({MAX_NP}, torch::kFloat32);
-    qt.numeric_valid = torch::zeros({MAX_NP}, torch::kBool);
-    qt.negation_mask = torch::zeros({P_TOTAL}, torch::kBool);
-    qt.conj_matrix = torch::zeros({MAX_CONJ, P_TOTAL}, torch::kBool);
-    qt.conj_valid = torch::zeros({MAX_CONJ}, torch::kBool);
+std::vector<QueryTensors> encode_dnf(const DNF& dnf, const IndexMetadata& meta) {
+
+    // ── Step 1: Allocate shared predicate tensors ───────────────────────
+    auto bitmap_indices = torch::zeros({MAX_BP}, torch::kInt64);
+    auto bitmap_valid   = torch::zeros({MAX_BP}, torch::kBool);
+    auto numeric_fields = torch::zeros({MAX_NP}, torch::kInt64);
+    auto numeric_ops    = torch::zeros({MAX_NP}, torch::kInt64);
+    auto numeric_values = torch::zeros({MAX_NP}, torch::kFloat32);
+    auto numeric_valid  = torch::zeros({MAX_NP}, torch::kBool);
+    auto negation_mask  = torch::zeros({P_TOTAL}, torch::kBool);
 
     struct PredKey {
         std::string type;
@@ -73,9 +73,9 @@ QueryTensors encode_dnf(const DNF& dnf, const IndexMetadata& meta) {
         if (bp_count >= MAX_BP) throw std::runtime_error("Exceeds MAX_BP");
 
         int idx = bp_count++;
-        qt.bitmap_indices[idx] = global_idx;
-        qt.bitmap_valid[idx] = true;
-        qt.negation_mask[idx] = neg;
+        bitmap_indices[idx] = global_idx;
+        bitmap_valid[idx] = true;
+        negation_mask[idx] = neg;
         bp_map[key] = idx;
         return idx;
     };
@@ -92,38 +92,87 @@ QueryTensors encode_dnf(const DNF& dnf, const IndexMetadata& meta) {
         if (np_count >= MAX_NP) throw std::runtime_error("Exceeds MAX_NP");
 
         int idx = np_count++;
-        qt.numeric_fields[idx] = nit->second;
-        qt.numeric_ops[idx] = oit->second;
-        qt.numeric_values[idx] = static_cast<float>(val);
-        qt.numeric_valid[idx] = true;
-        qt.negation_mask[MAX_BP + idx] = neg;
+        numeric_fields[idx] = nit->second;
+        numeric_ops[idx] = oit->second;
+        numeric_values[idx] = static_cast<float>(val);
+        numeric_valid[idx] = true;
+        negation_mask[MAX_BP + idx] = neg;
         np_map[key] = idx;
         return idx;
     };
 
-    for (int ci = 0; ci < static_cast<int>(dnf.size()) && ci < MAX_CONJ; ++ci) {
-        qt.conj_valid[ci] = true;
-        for (auto& lit : dnf[ci]) {
+    // First pass: register all predicates so shared tensors are complete
+    for (auto& conj : dnf) {
+        for (auto& lit : conj) {
             auto pred = lit.pred;
             bool neg = lit.negated;
-
-            if (pred.op == "!=") {
-                pred.op = "==";
-                neg = !neg;
-            }
+            if (pred.op == "!=") { pred.op = "=="; neg = !neg; }
 
             if (meta.discrete_field_set.count(pred.field) ||
                 (meta.text_field_set.count(pred.field) && pred.op == "contains")) {
-                int idx = resolve_bitmap(pred, neg);
-                if (idx >= 0) qt.conj_matrix[ci][idx] = true;
+                resolve_bitmap(pred, neg);
             } else if (meta.numeric_field_index.count(pred.field)) {
-                int idx = resolve_numeric(pred, neg);
-                if (idx >= 0) qt.conj_matrix[ci][MAX_BP + idx] = true;
+                resolve_numeric(pred, neg);
             }
         }
     }
 
-    return qt;
+    // ── Step 2: Build batched conj_matrix / conj_valid ──────────────────
+    std::vector<QueryTensors> batches;
+    int total = static_cast<int>(dnf.size());
+
+    for (int start = 0; start < total; start += CONJ_PER_PASS) {
+        int end = std::min(start + CONJ_PER_PASS, total);
+
+        auto conj_matrix = torch::zeros({CONJ_PER_PASS, P_TOTAL}, torch::kBool);
+        auto conj_valid  = torch::zeros({CONJ_PER_PASS}, torch::kBool);
+
+        for (int ci = 0; ci < end - start; ++ci) {
+            conj_valid[ci] = true;
+            for (auto& lit : dnf[start + ci]) {
+                auto pred = lit.pred;
+                bool neg = lit.negated;
+                if (pred.op == "!=") { pred.op = "=="; neg = !neg; }
+
+                if (meta.discrete_field_set.count(pred.field) ||
+                    (meta.text_field_set.count(pred.field) && pred.op == "contains")) {
+                    int idx = resolve_bitmap(pred, neg);
+                    if (idx >= 0) conj_matrix[ci][idx] = true;
+                } else if (meta.numeric_field_index.count(pred.field)) {
+                    int idx = resolve_numeric(pred, neg);
+                    if (idx >= 0) conj_matrix[ci][MAX_BP + idx] = true;
+                }
+            }
+        }
+
+        QueryTensors qt;
+        qt.bitmap_indices = bitmap_indices;
+        qt.bitmap_valid   = bitmap_valid;
+        qt.numeric_fields = numeric_fields;
+        qt.numeric_ops    = numeric_ops;
+        qt.numeric_values = numeric_values;
+        qt.numeric_valid  = numeric_valid;
+        qt.negation_mask  = negation_mask;
+        qt.conj_matrix    = conj_matrix;
+        qt.conj_valid     = conj_valid;
+        batches.push_back(std::move(qt));
+    }
+
+    if (batches.empty()) {
+        QueryTensors qt;
+        qt.bitmap_indices = bitmap_indices;
+        qt.bitmap_valid   = bitmap_valid;
+        qt.numeric_fields = numeric_fields;
+        qt.numeric_ops    = numeric_ops;
+        qt.numeric_values = numeric_values;
+        qt.numeric_valid  = numeric_valid;
+        qt.negation_mask  = negation_mask;
+        qt.conj_matrix    = torch::zeros({CONJ_PER_PASS, P_TOTAL}, torch::kBool);
+        qt.conj_valid     = torch::zeros({CONJ_PER_PASS}, torch::kBool);
+        batches.push_back(std::move(qt));
+    }
+
+    return batches;
 }
 
 }  // namespace torch_recall

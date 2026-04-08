@@ -7,9 +7,10 @@
 
 namespace torch_recall {
 
-constexpr int MAX_BP = 32;
-constexpr int MAX_NP = 16;
-constexpr int MAX_CONJ = 16;
+constexpr int MAX_BP = 16;
+constexpr int MAX_NP = 8;
+constexpr int MAX_CONJ = 1024;    // system-level limit
+constexpr int CONJ_PER_PASS = 8;  // model-level limit per forward pass
 constexpr int P_TOTAL = MAX_BP + MAX_NP;
 
 enum class NumericOp : int64_t {

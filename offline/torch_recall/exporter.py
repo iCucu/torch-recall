@@ -1,7 +1,7 @@
 import torch
 import torch._inductor
 
-from torch_recall.schema import MAX_BP, MAX_NP, MAX_CONJ, P_TOTAL
+from torch_recall.schema import MAX_BP, MAX_NP, P_TOTAL, CONJ_PER_PASS
 from torch_recall.model import InvertedIndexModel
 
 
@@ -14,8 +14,8 @@ def create_example_inputs(model: InvertedIndexModel, device: str = "cpu") -> tup
         torch.zeros(MAX_NP, dtype=torch.float32, device=device),
         torch.zeros(MAX_NP, dtype=torch.bool, device=device),
         torch.zeros(P_TOTAL, dtype=torch.bool, device=device),
-        torch.zeros(MAX_CONJ, P_TOTAL, dtype=torch.bool, device=device),
-        torch.zeros(MAX_CONJ, dtype=torch.bool, device=device),
+        torch.zeros(CONJ_PER_PASS, P_TOTAL, dtype=torch.bool, device=device),
+        torch.zeros(CONJ_PER_PASS, dtype=torch.bool, device=device),
     )
 
 

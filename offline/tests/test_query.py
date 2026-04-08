@@ -1,4 +1,5 @@
 import torch
+from torch_recall.schema import MAX_BP
 from torch_recall.query import parse_expr, to_dnf, encode_query, And, Or, Not, Predicate
 
 
@@ -81,7 +82,7 @@ def test_encode_query():
         "num_bitmaps": 6,
     }
     tensors = encode_query('city == "北京" AND price < 50.0', meta)
-    assert tensors["bitmap_indices"].shape[0] == 32
+    assert tensors["bitmap_indices"].shape[0] == MAX_BP
     assert tensors["bitmap_valid"][0].item() is True
     assert tensors["numeric_valid"][0].item() is True
     assert tensors["conj_valid"][0].item() is True

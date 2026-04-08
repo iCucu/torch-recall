@@ -30,8 +30,9 @@ CPP_CLI = Path(__file__).resolve().parents[2] / "online" / "build" / "torch_reca
 
 def _decode_bitmap(result: torch.Tensor, num_items: int) -> list[int]:
     ids = []
+    mask64 = (1 << 64) - 1
     for w in range(result.shape[0]):
-        word = result[w].item()
+        word = result[w].item() & mask64
         if word == 0:
             continue
         base = w * 64

@@ -1,6 +1,6 @@
 import pytest
 import torch
-from torch_recall.schema import Schema
+from torch_recall.schema import Schema, MAX_BP, MAX_NP, CONJ_PER_PASS, P_TOTAL
 from torch_recall.model import InvertedIndexModel
 
 
@@ -48,15 +48,15 @@ def _make_small_model():
 
 def _make_query_tensors(**overrides):
     tensors = {
-        "bitmap_indices": torch.zeros(32, dtype=torch.int64),
-        "bitmap_valid": torch.zeros(32, dtype=torch.bool),
-        "numeric_fields": torch.zeros(16, dtype=torch.int64),
-        "numeric_ops": torch.zeros(16, dtype=torch.int64),
-        "numeric_values": torch.zeros(16, dtype=torch.float32),
-        "numeric_valid": torch.zeros(16, dtype=torch.bool),
-        "negation_mask": torch.zeros(48, dtype=torch.bool),
-        "conj_matrix": torch.zeros(16, 48, dtype=torch.bool),
-        "conj_valid": torch.zeros(16, dtype=torch.bool),
+        "bitmap_indices": torch.zeros(MAX_BP, dtype=torch.int64),
+        "bitmap_valid": torch.zeros(MAX_BP, dtype=torch.bool),
+        "numeric_fields": torch.zeros(MAX_NP, dtype=torch.int64),
+        "numeric_ops": torch.zeros(MAX_NP, dtype=torch.int64),
+        "numeric_values": torch.zeros(MAX_NP, dtype=torch.float32),
+        "numeric_valid": torch.zeros(MAX_NP, dtype=torch.bool),
+        "negation_mask": torch.zeros(P_TOTAL, dtype=torch.bool),
+        "conj_matrix": torch.zeros(CONJ_PER_PASS, P_TOTAL, dtype=torch.bool),
+        "conj_valid": torch.zeros(CONJ_PER_PASS, dtype=torch.bool),
     }
     for k, v in overrides.items():
         tensors[k] = v
@@ -126,7 +126,7 @@ def test_numeric_less_than():
     t["numeric_ops"][0] = 1  # LT
     t["numeric_values"][0] = 25.0
     t["numeric_valid"][0] = True
-    t["conj_matrix"][0, 32] = True
+    t["conj_matrix"][0, MAX_BP] = True
     t["conj_valid"][0] = True
 
     result = model(**t)

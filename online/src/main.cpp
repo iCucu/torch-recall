@@ -34,17 +34,27 @@ int main(int argc, char* argv[]) {
         auto dnf = torch_recall::to_dnf(expr);
         std::cout << "  DNF conjunctions: " << dnf.size() << std::endl;
 
-        auto qt = torch_recall::encode_dnf(dnf, meta);
+        auto batches = torch_recall::encode_dnf(dnf, meta);
+        std::cout << "  Forward passes: " << batches.size() << std::endl;
 
         std::cout << "Running query..." << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
 
-        auto result = runner.run(
-            qt.bitmap_indices, qt.bitmap_valid,
-            qt.numeric_fields, qt.numeric_ops,
-            qt.numeric_values, qt.numeric_valid,
-            qt.negation_mask, qt.conj_matrix, qt.conj_valid
-        );
+        torch::Tensor result;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            auto& qt = batches[i];
+            auto pass_result = runner.run(
+                qt.bitmap_indices, qt.bitmap_valid,
+                qt.numeric_fields, qt.numeric_ops,
+                qt.numeric_values, qt.numeric_valid,
+                qt.negation_mask, qt.conj_matrix, qt.conj_valid
+            );
+            if (i == 0) {
+                result = pass_result;
+            } else {
+                result = result | pass_result;
+            }
+        }
 
         auto end = std::chrono::high_resolution_clock::now();
         double ms = std::chrono::duration<double, std::milli>(end - start).count();

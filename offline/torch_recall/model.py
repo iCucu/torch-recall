@@ -1,10 +1,20 @@
 import torch
 import torch.nn as nn
 
-from torch_recall.schema import MAX_BP, MAX_NP, MAX_CONJ, P_TOTAL
+from torch_recall.schema import (
+    MAX_BP, MAX_NP, P_TOTAL,
+    CONJ_PER_PASS, CONJ_PASS_LEVELS,
+)
 
 
 class InvertedIndexModel(nn.Module):
+    """Bitmap inverted index model.
+
+    The forward() handles CONJ_PER_PASS conjunctions in one pass using
+    vectorized AND + tree-reduced OR.  For queries exceeding this limit,
+    the caller invokes forward() multiple times and ORs the results.
+    """
+
     def __init__(
         self,
         bitmaps: torch.Tensor,
@@ -56,21 +66,22 @@ class InvertedIndexModel(nn.Module):
 
     def forward(
         self,
-        bitmap_indices: torch.Tensor,
-        bitmap_valid: torch.Tensor,
-        numeric_fields: torch.Tensor,
-        numeric_ops: torch.Tensor,
-        numeric_values: torch.Tensor,
-        numeric_valid: torch.Tensor,
-        negation_mask: torch.Tensor,
-        conj_matrix: torch.Tensor,
-        conj_valid: torch.Tensor,
+        bitmap_indices: torch.Tensor,   # [MAX_BP]
+        bitmap_valid: torch.Tensor,     # [MAX_BP]
+        numeric_fields: torch.Tensor,   # [MAX_NP]
+        numeric_ops: torch.Tensor,      # [MAX_NP]
+        numeric_values: torch.Tensor,   # [MAX_NP]
+        numeric_valid: torch.Tensor,    # [MAX_NP]
+        negation_mask: torch.Tensor,    # [P_TOTAL]
+        conj_matrix: torch.Tensor,      # [CONJ_PER_PASS, P_TOTAL]
+        conj_valid: torch.Tensor,       # [CONJ_PER_PASS]
     ) -> torch.Tensor:
         L = self.bitmap_len
 
-        bp = self.bitmaps[bitmap_indices]
+        # ── Gather predicate bitmaps ─────────────────────────────────────
+        bp = self.bitmaps[bitmap_indices]  # [MAX_BP, L]
 
-        cols = self.numeric_data[numeric_fields]
+        cols = self.numeric_data[numeric_fields]  # [MAX_NP, N]
         vals = numeric_values.unsqueeze(1)
         ops = numeric_ops
 
@@ -82,13 +93,15 @@ class InvertedIndexModel(nn.Module):
             | ((cols >= vals) & (ops == 4).unsqueeze(1))
         )
 
-        np_bitmap = self._pack_bool_to_bitmap(numeric_bool)
+        np_bitmap = self._pack_bool_to_bitmap(numeric_bool)  # [MAX_NP, L]
 
-        all_bm = torch.cat([bp, np_bitmap], dim=0)
+        all_bm = torch.cat([bp, np_bitmap], dim=0)  # [P_TOTAL, L]
 
+        # ── Apply negation ───────────────────────────────────────────────
         neg = negation_mask[:P_TOTAL].unsqueeze(1)
         all_bm = torch.where(neg, (all_bm ^ self.all_ones) & self.valid_mask, all_bm)
 
+        # ── Apply predicate validity (invalid → all_ones = AND identity) ─
         all_valid = torch.cat([bitmap_valid, numeric_valid])
         all_bm = torch.where(
             all_valid.unsqueeze(1),
@@ -96,20 +109,32 @@ class InvertedIndexModel(nn.Module):
             self.all_ones.unsqueeze(0).expand(P_TOTAL, L),
         )
 
-        pred_parts = all_bm.unbind(0)
+        # ── Vectorized conjunction evaluation ────────────────────────────
+        # [CONJ_PER_PASS, L], initialised to AND identity
+        conj_results = self.all_ones.unsqueeze(0).expand(CONJ_PER_PASS, L).contiguous()
 
-        result = torch.zeros(L, dtype=torch.int64, device=all_bm.device)
+        # AND loop: iterate over predicates (P_TOTAL iterations, small fixed count).
+        for p in range(P_TOTAL):
+            mask_p = conj_matrix[:, p].unsqueeze(1)           # [CONJ_PER_PASS, 1]
+            pred_bm = all_bm[p].unsqueeze(0)                  # [1, L]
+            selected = torch.where(mask_p, pred_bm, self.all_ones.unsqueeze(0))
+            conj_results = conj_results & selected
 
-        for c in range(MAX_CONJ):
-            conj_row = conj_matrix[c]
-            conj_result = self.all_ones.clone()
-            for p in range(P_TOTAL):
-                selected = torch.where(conj_row[p], pred_parts[p], self.all_ones)
-                conj_result = conj_result & selected
-            conj_result = torch.where(
-                conj_valid[c], conj_result, torch.zeros_like(conj_result)
-            )
-            result = result | conj_result
+        # Zero out invalid conjunctions (OR identity = 0)
+        conj_results = torch.where(
+            conj_valid.unsqueeze(1),
+            conj_results,
+            torch.zeros(1, L, dtype=torch.int64, device=conj_results.device),
+        )
+
+        # ── OR tree reduction: log2(CONJ_PER_PASS) steps ────────────────
+        cr = conj_results
+        size = CONJ_PER_PASS
+        for _ in range(CONJ_PASS_LEVELS):
+            size = size // 2
+            cr = cr.view(size, 2, L)
+            cr = cr[:, 0, :] | cr[:, 1, :]
+        result = cr.squeeze(0)
 
         result = result & self.valid_mask
 

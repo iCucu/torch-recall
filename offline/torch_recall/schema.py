@@ -42,7 +42,12 @@ class Schema:
         return {name: i for i, name in enumerate(self.text_fields)}
 
 
-MAX_BP = 32
-MAX_NP = 16
-MAX_CONJ = 16
+MAX_BP = 16
+MAX_NP = 8
+MAX_CONJ = 1024   # system-level limit: max conjunctions per query
 P_TOTAL = MAX_BP + MAX_NP
+
+# Model-level constants (used in forward / .pt2 export).
+# Queries with >CONJ_PER_PASS conjunctions are split into multiple passes.
+CONJ_PER_PASS = 8
+CONJ_PASS_LEVELS = 3  # log2(CONJ_PER_PASS)

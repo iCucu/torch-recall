@@ -6,7 +6,10 @@ from typing import Union
 
 import torch
 
-from torch_recall.schema import MAX_BP, MAX_NP, MAX_CONJ, P_TOTAL
+from torch_recall.schema import (
+    MAX_BP, MAX_NP, MAX_CONJ, P_TOTAL,
+    CONJ_PER_PASS,
+)
 
 
 # --- AST Nodes ---
@@ -226,12 +229,40 @@ def _negate_dnf(expr: Expr) -> DNF:
 
 
 def encode_query(expr_str: str, meta: dict) -> dict[str, torch.Tensor]:
+    """Encode a query string into tensor inputs for InvertedIndexModel.
+
+    If the DNF has ≤ CONJ_PER_PASS conjunctions, returns a single dict of
+    tensors suitable for ``model(**tensors)``.
+
+    If the DNF exceeds CONJ_PER_PASS, returns a list of dicts (one per pass).
+    The caller should OR the results across passes.
+
+    For backward compatibility the function always returns the "simple" dict
+    when possible.
+    """
     expr = parse_expr(expr_str)
     dnf = to_dnf(expr)
-    return _encode_dnf(dnf, meta)
+
+    if len(dnf) <= CONJ_PER_PASS:
+        return _encode_dnf_single(dnf, meta)
+    return _encode_dnf_multi(dnf, meta)
 
 
-def _encode_dnf(dnf: DNF, meta: dict) -> dict[str, torch.Tensor]:
+def encode_query_batched(expr_str: str, meta: dict) -> list[dict[str, torch.Tensor]]:
+    """Always returns a list of tensor dicts (one per pass)."""
+    expr = parse_expr(expr_str)
+    dnf = to_dnf(expr)
+
+    if len(dnf) <= CONJ_PER_PASS:
+        return [_encode_dnf_single(dnf, meta)]
+
+    return _encode_dnf_multi(dnf, meta)
+
+
+# ── internal helpers ─────────────────────────────────────────────────────────
+
+def _collect_predicates(dnf: DNF, meta: dict):
+    """First pass: allocate global predicate slots and fill validity/negation."""
     schema = meta["schema"]
     discrete_fields = set(schema["discrete"])
     numeric_fields_list = schema["numeric"]
@@ -247,8 +278,6 @@ def _encode_dnf(dnf: DNF, meta: dict) -> dict[str, torch.Tensor]:
     numeric_values = torch.zeros(MAX_NP, dtype=torch.float32)
     numeric_valid = torch.zeros(MAX_NP, dtype=torch.bool)
     negation_mask = torch.zeros(P_TOTAL, dtype=torch.bool)
-    conj_matrix = torch.zeros(MAX_CONJ, P_TOTAL, dtype=torch.bool)
-    conj_valid = torch.zeros(MAX_CONJ, dtype=torch.bool)
 
     pred_key_to_bp_idx: dict[tuple, int] = {}
     pred_key_to_np_idx: dict[tuple, int] = {}
@@ -316,9 +345,35 @@ def _encode_dnf(dnf: DNF, meta: dict) -> dict[str, torch.Tensor]:
             else:
                 raise ValueError(f"Unknown field or op: {pred.field} {pred.op}")
 
-    for ci, conj in enumerate(dnf):
-        if ci >= MAX_CONJ:
-            raise ValueError(f"Exceeds MAX_CONJ={MAX_CONJ}")
+    shared = {
+        "bitmap_indices": bitmap_indices,
+        "bitmap_valid": bitmap_valid,
+        "numeric_fields": numeric_fields_t,
+        "numeric_ops": numeric_ops,
+        "numeric_values": numeric_values,
+        "numeric_valid": numeric_valid,
+        "negation_mask": negation_mask,
+    }
+    return shared, pred_key_to_bp_idx, pred_key_to_np_idx
+
+
+def _fill_conj_matrix(
+    dnf_slice: list[Conjunction],
+    meta: dict,
+    pred_key_to_bp_idx: dict[tuple, int],
+    pred_key_to_np_idx: dict[tuple, int],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Build conj_matrix + conj_valid for a batch of conjunctions."""
+    schema = meta["schema"]
+    discrete_fields = set(schema["discrete"])
+    text_fields = set(schema["text"])
+    numeric_field_idx = {name: i for i, name in enumerate(schema["numeric"])}
+    OP_MAP = {"==": 0, "<": 1, ">": 2, "<=": 3, ">=": 4}
+
+    conj_matrix = torch.zeros(CONJ_PER_PASS, P_TOTAL, dtype=torch.bool)
+    conj_valid = torch.zeros(CONJ_PER_PASS, dtype=torch.bool)
+
+    for ci, conj in enumerate(dnf_slice):
         conj_valid[ci] = True
         for lit in conj:
             pred = lit.pred
@@ -355,14 +410,32 @@ def _encode_dnf(dnf: DNF, meta: dict) -> dict[str, torch.Tensor]:
                 if key in pred_key_to_np_idx:
                     conj_matrix[ci, MAX_BP + pred_key_to_np_idx[key]] = True
 
+    return conj_matrix, conj_valid
+
+
+def _encode_dnf_single(dnf: DNF, meta: dict) -> dict[str, torch.Tensor]:
+    """Encode a DNF with ≤ CONJ_PER_PASS conjunctions into one tensor dict."""
+    shared, bp_map, np_map = _collect_predicates(dnf, meta)
+    conj_matrix, conj_valid = _fill_conj_matrix(dnf, meta, bp_map, np_map)
+
     return {
-        "bitmap_indices": bitmap_indices,
-        "bitmap_valid": bitmap_valid,
-        "numeric_fields": numeric_fields_t,
-        "numeric_ops": numeric_ops,
-        "numeric_values": numeric_values,
-        "numeric_valid": numeric_valid,
-        "negation_mask": negation_mask,
+        **shared,
         "conj_matrix": conj_matrix,
         "conj_valid": conj_valid,
     }
+
+
+def _encode_dnf_multi(dnf: DNF, meta: dict) -> list[dict[str, torch.Tensor]]:
+    """Encode a large DNF into multiple tensor dicts (one per pass)."""
+    shared, bp_map, np_map = _collect_predicates(dnf, meta)
+
+    batches: list[dict[str, torch.Tensor]] = []
+    for start in range(0, len(dnf), CONJ_PER_PASS):
+        chunk = dnf[start:start + CONJ_PER_PASS]
+        conj_matrix, conj_valid = _fill_conj_matrix(chunk, meta, bp_map, np_map)
+        batches.append({
+            **shared,
+            "conj_matrix": conj_matrix,
+            "conj_valid": conj_valid,
+        })
+    return batches
