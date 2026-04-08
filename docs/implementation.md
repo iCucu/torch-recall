@@ -260,32 +260,93 @@ all_bm[23] = 0b111111  (无效 → all_ones)
 
 #### 阶段 3: 向量化 AND
 
-初始: `conj_results[0..7] = 0b111111` (AND 单位元, 全 1)
+核心循环: 遍历 P_TOTAL=24 个谓词槽位，每次对所有 8 个 conjunction **同时** 做 AND。
 
-24 次迭代中，只有 p=0, p=1, p=16 的 conj_matrix 中有 True，其余谓词 all_bm = all_ones，AND 不改变结果。等价于：
+每次迭代 p 的操作:
 
 ```
-p=0 (city=北京, 0b010101):
-  conj 0 使用 (matrix[0,0]=T): conj_results[0] &= 0b010101 → 0b010101
-  conj 1 不使用 (matrix[1,0]=F): conj_results[1] &= 0b111111 → 不变
-
-p=1 (city=上海, 0b100010):
-  conj 0 不使用: 不变
-  conj 1 使用 (matrix[1,1]=T): conj_results[1] &= 0b100010 → 0b100010
-
-p=16 (price<100, 0b111001):
-  conj 0 使用 (matrix[0,16]=T): conj_results[0] &= 0b111001 → 0b010001
-  conj 1 使用 (matrix[1,16]=T): conj_results[1] &= 0b111001 → 0b100000
-
-p=2..15, p=17..23: all_bm = all_ones, AND 不改变结果
+effective[c] = conj_matrix[c, p] ? all_bm[p] : all_ones   (选择性屏蔽)
+conj_results[c] = conj_results[c] & effective[c]          (按位 AND)
 ```
+
+初始状态: `conj_results[0..7] = 0b111111` (AND 单位元, 全 1)
+
+下面展开每一次有效迭代的两个操作数和结果 (24 次中只有 p=0, 1, 16 改变结果，其余 all_bm=all_ones，AND 后不变，省略):
+
+**迭代 p=0** — 谓词: city=北京, `all_bm[0]=0b010101`
+
+```
+conj_matrix[:, 0] = [1, 0, 0, 0, 0, 0, 0, 0]
+                      ↑conj0用  ↑其余不用
+
+effective =        [0b010101, 0b111111, 0b111111, ..., 0b111111]
+                    ↑真实bitmap  ↑all_ones(不影响)
+
+conj_results       [0b111111, 0b111111, 0b111111, ..., 0b111111]  (before)
+              AND  [0b010101, 0b111111, 0b111111, ..., 0b111111]  (effective)
+            ───────────────────────────────────────────────────
+              =    [0b010101, 0b111111, 0b111111, ..., 0b111111]  (after)
+                    ↑{0,2,4}   ↑不变
+```
+
+**迭代 p=1** — 谓词: city=上海, `all_bm[1]=0b100010`
+
+```
+conj_matrix[:, 1] = [0, 1, 0, 0, 0, 0, 0, 0]
+                         ↑conj1用
+
+effective =        [0b111111, 0b100010, 0b111111, ..., 0b111111]
+
+conj_results       [0b010101, 0b111111, 0b111111, ..., 0b111111]  (before)
+              AND  [0b111111, 0b100010, 0b111111, ..., 0b111111]  (effective)
+            ───────────────────────────────────────────────────
+              =    [0b010101, 0b100010, 0b111111, ..., 0b111111]  (after)
+                    ↑不变      ↑{1,5}
+```
+
+**迭代 p=2..15** — all_bm 均为 all_ones (无效谓词已被替换)，AND 后 conj_results 不变，跳过。
+
+**迭代 p=16** — 谓词: price<100, `all_bm[16]=0b111001`
+
+```
+conj_matrix[:, 16] = [1, 1, 0, 0, 0, 0, 0, 0]
+                       ↑conj0  ↑conj1 都用
+
+effective =         [0b111001, 0b111001, 0b111111, ..., 0b111111]
+
+conj_results        [0b010101, 0b100010, 0b111111, ..., 0b111111]  (before)
+              AND   [0b111001, 0b111001, 0b111111, ..., 0b111111]  (effective)
+            ────────────────────────────────────────────────────
+              =     [0b010001, 0b100000, 0b111111, ..., 0b111111]  (after)
+                     ↑{0,4}    ↑{5}
+
+逐位验证 conj 0:  0b010101 (北京:0,2,4) & 0b111001 (价格<100:0,3,4,5)
+  bit 0: 1&1=1 ✓ item0 北京+68<100
+  bit 1: 0&0=0   item1 不是北京
+  bit 2: 1&0=0   item2 北京但 299≥100
+  bit 3: 0&1=0   item3 不是北京
+  bit 4: 1&1=1 ✓ item4 北京+15<100
+  bit 5: 0&1=0   item5 不是北京
+  结果: 0b010001 = {item 0, 4}  ✓
+
+逐位验证 conj 1:  0b100010 (上海:1,5) & 0b111001 (价格<100:0,3,4,5)
+  bit 0: 0&1=0   item0 不是上海
+  bit 1: 1&0=0   item1 上海但 128≥100
+  bit 2: 0&0=0
+  bit 3: 0&1=0
+  bit 4: 0&1=0
+  bit 5: 1&1=1 ✓ item5 上海+88<100
+  结果: 0b100000 = {item 5}  ✓
+```
+
+**迭代 p=17..23** — 同 p=2..15，all_ones，不变。
 
 AND 完成后:
 
 ```
 conj_results[0] = 0b010001 = {item 0, 4}    ← 北京 AND 价格<100 ✓
 conj_results[1] = 0b100000 = {item 5}       ← 上海 AND 价格<100 ✓
-conj_results[2..7] = 0b111111               ← padding
+conj_results[2..7] = 0b111111               ← padding (后续置零)
 ```
 
 #### 阶段 4: 置零无效 + OR 树规约
@@ -345,6 +406,294 @@ item 3: city=广州 ✗                  → 不匹配
 item 4: city=北京 ✓, price=15<100 ✓  → 匹配
 item 5: city=上海 ✓, price=88<100 ✓  → 匹配
 ```
+
+---
+
+### 更多查询示例
+
+以下示例复用同一份索引 (bitmap 表和数值列不变)，只展示查询处理和 forward() 中与示例一不同的部分。
+
+#### 示例二: 带 NOT 的查询
+
+查询: `gender == "男" AND NOT city == "广州"`
+
+**DNF 转换**
+
+```
+DNF = [
+  conjunction 0: [gender=男, NOT city=广州]
+]
+```
+
+**张量编码**
+
+```
+bitmap 谓词:
+  bp_idx 0 → gender=男,  bitmap_indices[0]=4  (行 4)
+  bp_idx 1 → city=广州,   bitmap_indices[1]=2  (行 2)
+  bp_idx 2..15 → padding
+
+negation_mask:
+  bp_idx 0 → False  (gender=男 不取反)
+  bp_idx 1 → True   (city=广州 取反!)
+  其余 → False
+
+数值谓词: 无, 全部 padding
+
+conj_matrix:
+                bp0  bp1  bp2..15  np0..7
+  conj 0:      [ 1,   1,   0..0,   0..0 ]   ← 同时使用 bp0 和 bp1
+  conj 1..7:   [ 0,   0,   0..0,   0..0 ]   ← padding
+
+conj_valid = [T, F, F, F, F, F, F, F]
+```
+
+**forward() — 取反处理**
+
+```
+收集 bitmap:
+  all_bm[0] = bitmaps[4] = 0b111001  (gender=男: item 0,3,4,5)
+  all_bm[1] = bitmaps[2] = 0b001000  (city=广州: item 3)
+
+取反 (negation_mask[1]=True):
+  all_bm[1] = (0b001000 XOR 0b111111) & 0b111111
+            =  0b110111 & 0b111111
+            =  0b110111                (NOT 广州: item 0,1,2,4,5)
+  all_bm[0] 不取反, 保持 0b111001
+
+有效性掩码: all_bm[2..23] → 0b111111 (all_ones)
+```
+
+**forward() — 向量化 AND**
+
+```
+初始: conj_results[0] = 0b111111
+
+迭代 p=0 — gender=男, all_bm[0]=0b111001:
+  conj_matrix[0,0]=T → effective[0]=0b111001
+
+  conj_results    [0b111111, ...]  (before)
+            AND   [0b111001, ...]  (effective)
+            ─────────────────────
+              =   [0b111001, ...]  (after: {0,3,4,5})
+
+迭代 p=1 — NOT city=广州, all_bm[1]=0b110111:
+  conj_matrix[0,1]=T → effective[0]=0b110111
+
+  conj_results    [0b111001, ...]  (before)
+            AND   [0b110111, ...]  (effective)
+            ─────────────────────
+              =   [0b110001, ...]  (after)
+
+  逐位: 0b111001 & 0b110111
+    bit 0: 1&1=1  item0 男+非广州 ✓
+    bit 1: 0&1=0  item1 不是男
+    bit 2: 0&1=0  item2 不是男
+    bit 3: 1&0=0  item3 男但是广州 → 被 NOT 排除
+    bit 4: 1&1=1  item4 男+非广州 ✓
+    bit 5: 1&1=1  item5 男+非广州 ✓
+    结果: 0b110001 = {item 0, 4, 5}
+
+迭代 p=2..23: all_ones, 不变
+```
+
+**结果: [0, 4, 5]** — 男性且非广州
+
+```
+item 0: gender=男 ✓, city=北京≠广州 ✓ → 匹配
+item 1: gender=女 ✗                   → 不匹配
+item 2: gender=女 ✗                   → 不匹配
+item 3: gender=男 ✓, city=广州 → NOT ✗ → 不匹配
+item 4: gender=男 ✓, city=北京≠广州 ✓ → 匹配
+item 5: gender=男 ✓, city=上海≠广州 ✓ → 匹配
+```
+
+---
+
+#### 示例三: 纯数值范围查询
+
+查询: `price >= 50 AND price < 200`
+
+**DNF 转换**
+
+```
+DNF = [
+  conjunction 0: [price>=50, price<200]
+]
+```
+
+**张量编码**
+
+```
+bitmap 谓词: 无, 全部 padding
+
+数值谓词:
+  np_idx 0 → price >= 50,  numeric_fields[0]=0, ops[0]=4(GE), values[0]=50.0
+  np_idx 1 → price < 200,  numeric_fields[1]=0, ops[1]=1(LT), values[1]=200.0
+  np_idx 2..7 → padding
+
+conj_matrix:
+                bp0..15  np0  np1  np2..7
+  conj 0:      [ 0..0,    1,   1,   0..0 ]
+  conj 1..7:   [ 0..0,    0,   0,   0..0 ]
+
+conj_valid = [T, F, F, F, F, F, F, F]
+```
+
+**forward() — 数值比较 + 打包**
+
+```
+numeric_data[0] = [68.0, 128.0, 299.0, 35.0, 15.0, 88.0]
+
+np_idx 0 (price >= 50):
+  [68≥50, 128≥50, 299≥50, 35≥50, 15≥50, 88≥50]
+  = [T, T, T, F, F, T]
+  → 打包: 0b100111 = {item 0,1,2,5}
+
+np_idx 1 (price < 200):
+  [68<200, 128<200, 299<200, 35<200, 15<200, 88<200]
+  = [T, T, F, T, T, T]
+  → 打包: 0b110111 = {item 0,1,3,4,5}
+
+all_bm[0..15]  = 0b111111 (bitmap 谓词全 padding → all_ones)
+all_bm[16]     = 0b100111 (price>=50)
+all_bm[17]     = 0b110111 (price<200)
+all_bm[18..23] = 0b111111 (padding → all_ones)
+```
+
+**forward() — 向量化 AND**
+
+```
+初始: conj_results[0] = 0b111111
+
+迭代 p=0..15: all_bm = all_ones, 不变 (无 bitmap 谓词)
+
+迭代 p=16 — price>=50, all_bm[16]=0b100111:
+  conj_matrix[0,16]=T → effective[0]=0b100111
+
+  conj_results    [0b111111]  (before)
+            AND   [0b100111]  (effective)
+            ─────────────────
+              =   [0b100111]  ({0,1,2,5})
+
+迭代 p=17 — price<200, all_bm[17]=0b110111:
+  conj_matrix[0,17]=T → effective[0]=0b110111
+
+  conj_results    [0b100111]  (before)
+            AND   [0b110111]  (effective)
+            ─────────────────
+              =   [0b100011]  (after)
+
+  逐位: 0b100111 & 0b110111
+    bit 0: 1&1=1  item0 68∈[50,200) ✓
+    bit 1: 1&1=1  item1 128∈[50,200) ✓
+    bit 2: 1&0=0  item2 299≥200 → price<200 ✗
+    bit 3: 0&1=0  item3 35<50 → price>=50 ✗
+    bit 4: 0&1=0  item4 15<50 → price>=50 ✗
+    bit 5: 1&1=1  item5 88∈[50,200) ✓
+    结果: 0b100011 = {item 0, 1, 5}
+
+迭代 p=18..23: all_ones, 不变
+```
+
+**结果: [0, 1, 5]** — 价格在 [50, 200) 范围内
+
+```
+item 0: price=68  ∈[50,200) ✓ → 匹配
+item 1: price=128 ∈[50,200) ✓ → 匹配
+item 2: price=299 ≥200      ✗ → 不匹配
+item 3: price=35  <50       ✗ → 不匹配
+item 4: price=15  <50       ✗ → 不匹配
+item 5: price=88  ∈[50,200) ✓ → 匹配
+```
+
+---
+
+#### 示例四: 多谓词 AND + 高选择性
+
+查询: `city == "北京" AND gender == "女" AND price >= 100`
+
+**DNF 转换**
+
+```
+DNF = [
+  conjunction 0: [city=北京, gender=女, price>=100]
+]
+```
+
+**张量编码**
+
+```
+bitmap 谓词:
+  bp_idx 0 → city=北京,   bitmap_indices[0]=1
+  bp_idx 1 → gender=女,   bitmap_indices[1]=3
+  bp_idx 2..15 → padding
+
+数值谓词:
+  np_idx 0 → price>=100, numeric_fields[0]=0, ops[0]=4(GE), values[0]=100.0
+
+conj_matrix:
+                bp0  bp1  bp2..15  np0  np1..7
+  conj 0:      [ 1,   1,   0..0,   1,   0..0 ]
+  conj 1..7:   [ 0,   0,   0..0,   0,   0..0 ]
+
+conj_valid = [T, F, F, F, F, F, F, F]
+```
+
+**forward() — 向量化 AND (3 次有效迭代)**
+
+```
+收集后:
+  all_bm[0]  = 0b010101  (city=北京: item 0,2,4)
+  all_bm[1]  = 0b000110  (gender=女: item 1,2)
+  all_bm[16] = 0b000110  (price>=100: [68≥100=F, 128≥100=T, 299≥100=T, 35≥100=F, 15≥100=F, 88≥100=F] → 0b000110 = {item 1,2})
+  其余 = 0b111111 (all_ones)
+
+初始: conj_results[0] = 0b111111
+
+迭代 p=0 — city=北京:
+  conj_results    [0b111111]
+            AND   [0b010101]
+            ─────────────────
+              =   [0b010101]  ({0,2,4})
+
+迭代 p=1 — gender=女:
+  conj_results    [0b010101]
+            AND   [0b000110]
+            ─────────────────
+              =   [0b000100]  ({2})
+
+  逐位: 0b010101 (北京:0,2,4) & 0b000110 (女:1,2)
+    bit 0: 1&0=0  item0 北京但男
+    bit 1: 0&1=0  item1 不是北京
+    bit 2: 1&1=1  item2 北京+女 ✓
+    bit 3: 0&0=0
+    bit 4: 1&0=0  item4 北京但男
+    bit 5: 0&0=0
+
+迭代 p=16 — price>=100:
+  conj_results    [0b000100]
+            AND   [0b000110]
+            ─────────────────
+              =   [0b000100]  ({2})
+
+  逐位: 0b000100 (北京女:2) & 0b000110 (价格≥100:1,2)
+    bit 2: 1&1=1  item2 北京+女+299≥100 ✓
+    其余: 0&x=0
+```
+
+**结果: [2]** — 只有 item 2 (北京, 女, 299)
+
+```
+item 0: city=北京 ✓, gender=男 ✗      → 不匹配
+item 1: city=上海 ✗                   → 不匹配
+item 2: city=北京 ✓, gender=女 ✓, price=299≥100 ✓ → 匹配 ✓
+item 3: city=广州 ✗                   → 不匹配
+item 4: city=北京 ✓, gender=男 ✗      → 不匹配
+item 5: city=上海 ✗                   → 不匹配
+```
+
+这个示例展示了**高选择性**的情况: 每一步 AND 都在缩小候选集，从全集 → 3 个(北京) → 1 个(+女) → 1 个(+价格≥100)。但 forward() 的计算量不变——24 次迭代全部执行，bitmap 全参与。这就是固定开销换可预测延迟的 trade-off。
 
 ---
 
