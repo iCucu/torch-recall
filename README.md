@@ -22,7 +22,7 @@
 - **DNF 查询**: 任意布尔表达式 → 递归下降解析 → De Morgan 展开为析取范式 → 固定大小张量输入
 - **两级 conjunction**: 模型单次处理 64 个 conjunction (CONJ_PER_PASS)，系统级支持 1024 个，超限自动分批
 
-详细实现原理与优化手段见 [docs/design.md](docs/design.md)，性能测试数据见 [docs/benchmark.md](docs/benchmark.md)。
+详细实现原理与优化手段见 [docs/design.md](docs/design.md)，逐模块代码解析见 [docs/implementation.md](docs/implementation.md)，性能测试数据见 [docs/benchmark.md](docs/benchmark.md)。
 
 ## 环境准备
 
@@ -136,8 +136,9 @@ torch-recall/
 │   └── CMakeLists.txt
 ├── examples/                       端到端演示
 └── docs/
-    ├── design.md                   实现细节与优化手段
-    └── benchmark.md                性能测试结果
+    ├── design.md                   架构设计与优化策略
+    ├── implementation.md           逐模块代码实现详解
+    └── benchmark.md                性能测试与对比结果
 ```
 
 ## 系统参数
