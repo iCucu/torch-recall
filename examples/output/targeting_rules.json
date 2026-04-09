@@ -1,0 +1,10 @@
+[
+  "city == \"北京\" AND gender == \"男\"",
+  "city == \"上海\"",
+  "age > 18",
+  "(city == \"北京\" OR city == \"上海\") AND age >= 25",
+  "tags contains \"游戏\"",
+  "price < 100.0 AND tags contains \"美食\"",
+  "city != \"广州\"",
+  "(city == \"广州\" AND gender == \"女\") OR age > 30"
+]

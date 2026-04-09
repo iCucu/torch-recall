@@ -1,0 +1,54 @@
+{
+  "num_items": 8,
+  "num_preds": 11,
+  "num_conjs": 10,
+  "predicate_registry": {
+    "discrete": {
+      "city": {
+        "北京": 0,
+        "上海": 2,
+        "广州": 8
+      },
+      "gender": {
+        "男": 1,
+        "女": 9
+      }
+    },
+    "numeric": [
+      {
+        "pred_id": 3,
+        "type": "numeric",
+        "field": "age",
+        "op": ">",
+        "value": 18.0
+      },
+      {
+        "pred_id": 4,
+        "type": "numeric",
+        "field": "age",
+        "op": ">=",
+        "value": 25.0
+      },
+      {
+        "pred_id": 6,
+        "type": "numeric",
+        "field": "price",
+        "op": "<",
+        "value": 100.0
+      },
+      {
+        "pred_id": 10,
+        "type": "numeric",
+        "field": "age",
+        "op": ">",
+        "value": 30.0
+      }
+    ],
+    "text": {
+      "tags": {
+        "游戏": 5,
+        "美食": 7
+      }
+    }
+  }
+}
