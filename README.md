@@ -17,7 +17,7 @@
 │    Pipeline     topk 输出    │    │    KNNBuilder               │
 │    exporter     .pt2 导出    │    │    encode_query             │
 │                              │    ├─────────────────────────────┤
-│  Inference/           │    │  ann/ (planned)             │
+│  inference/           │    │  ann/ (planned)             │
 │    通用 C++ 推理引擎          │    │    ANNRecall                │
 └─────────────────────────────┘    └─────────────────────────────┘
 ```
@@ -204,7 +204,7 @@ torch-recall/
 │       │   └── exporter.py              通用 .pt2 导出
 │       ├── query/                       布尔表达式解析 + DNF
 │       └── tokenizer.py                 分词器
-├── Inference/                    通用 C++ 推理引擎
+├── inference/                    通用 C++ 推理引擎
 ├── examples/                            端到端演示
 └── docs/
     ├── architecture.md                  框架架构

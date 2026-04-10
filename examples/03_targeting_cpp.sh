@@ -15,14 +15,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-CLI="$ROOT_DIR/Inference/build/torch_recall_cli"
+CLI="$ROOT_DIR/inference/build/torch_recall_cli"
 MODEL="$SCRIPT_DIR/output/targeting_model.pt2"
 META="$SCRIPT_DIR/output/targeting_meta.json"
 TENSORS="$SCRIPT_DIR/output/targeting_tensors.pt"
 
 if [ ! -f "$CLI" ]; then
     echo "错误: C++ CLI 未编译。请先运行:"
-    echo "  cd Inference && mkdir -p build && cd build"
+    echo "  cd inference && mkdir -p build && cd build"
     echo "  cmake -DCMAKE_PREFIX_PATH=\"\$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')\" .."
     echo "  cmake --build . --config Release"
     exit 1
