@@ -1,6 +1,17 @@
-# examples — 定向召回 完整演示
+# examples — 召回框架完整演示
+
+## 示例列表
+
+| 示例 | 说明 |
+|------|------|
+| `01_build_targeting.py` | 定向召回: 离线构建索引 + 导出 .pt2 |
+| `02_query_targeting.py` | 定向召回: Python 在线匹配 |
+| `03_targeting_cpp.sh` | 定向召回: C++ 推理 |
+| `04_pipeline_and.py` | **Pipeline: Targeting + KNN 并行召回取交集** |
 
 ## 流程概览
+
+### 单独使用 Targeting
 
 ```
 01_build_targeting.py        02_query_targeting.py        03_targeting_cpp.sh
@@ -17,6 +28,32 @@
                                                       (Python + C++)
 ```
 
+### Pipeline: Targeting + KNN 取交集 (推荐)
+
+```
+04_pipeline_and.py
+      │
+      ▼
+┌──────────────────────────────────┐
+│  定义 Schema                      │
+│  准备 Item (规则 + embedding)     │
+│  声明: And(Targeting, KNN)       │
+│  PipelineBuilder.build(items)    │
+│         ↓                         │
+│  pipeline(pred_satisfied, query) │
+│         ↓                         │
+│  → top_scores, top_indices       │
+│         ↓                         │
+│  导出 pipeline.pt2               │
+└──────────────────────────────────┘
+```
+
+`And(Targeting, KNN)` 的效果:
+- **Targeting** 做硬过滤: 只保留定向规则匹配的 item（不匹配 → `-inf`）
+- **KNN** 做相似度排序: 按 embedding 相似度打分
+- **And** 取交集: 分数相加，`-inf` 使不匹配项被排除
+- **topk**: 从匹配项中取分数最高的 K 个
+
 ## 运行步骤
 
 ```bash
@@ -32,48 +69,42 @@ PYTHONPATH=index_model python examples/02_query_targeting.py
 
 # 3. 在线: C++ 推理 (需先编译)
 bash examples/03_targeting_cpp.sh
+
+# 4. Pipeline: Targeting + KNN 取交集
+PYTHONPATH=index_model python examples/04_pipeline_and.py
 ```
 
 ## 产出文件
 
-运行 step 1 后会在 `examples/output/` 下生成:
+运行后会在 `examples/output/` 下生成:
 
-| 文件 | 说明 |
-|---|---|
-| `targeting_model.pt2` | AOTInductor 编译后的模型包，可被 C++ `AOTIModelPackageLoader` 加载 |
-| `targeting_meta.json` | 谓词注册表: 离散/数值/文本谓词映射 + 模型维度信息 |
-| `targeting_rules.json` | 原始定向规则，方便查看结果对应的 item |
+| 文件 | 来源 | 说明 |
+|---|---|---|
+| `targeting_model.pt2` | 01 | 单独 Targeting 模型包 |
+| `targeting_meta.json` | 01 | Targeting 谓词注册表 + 元信息 |
+| `targeting_rules.json` | 01 | 原始定向规则 |
+| `pipeline_and.pt2` | 04 | And(Targeting, KNN) 组合模型包 |
+| `pipeline_and_meta.json` | 04 | Pipeline 元信息（含 targeting + knn） |
 
-## C++ 推理引擎
+## 组合方式一览
 
-C++ 推理引擎是一个通用的 tensor-in / tensor-out 推理器，不包含任何业务逻辑:
+```python
+from torch_recall.scheduler import And, Or, Targeting, KNN, PipelineBuilder
 
+# Targeting + KNN 取交集（定向过滤 + 排序）
+spec = And(Targeting(schema), KNN(metric="cosine"))
+
+# 多路 KNN 取并集
+spec = Or(KNN(metric="cosine"), KNN(metric="l2"))
+
+# 复杂嵌套: (定向 AND 文本KNN) OR 图像KNN
+spec = Or(
+    And(Targeting(schema), KNN(metric="cosine")),
+    KNN(metric="inner_product"),
+)
+
+# 构建 + 导出
+builder = PipelineBuilder(spec, k=100)
+pipeline, meta = builder.build(items)
+export_recall_model(pipeline, "pipeline.pt2")
 ```
-torch_recall_cli <model.pt2> <inputs.pt> [--num-items N]
-```
-
-- `inputs.pt` — Python 端编码好的张量文件 (`list[list[Tensor]]`)
-- `--num-items N` — 如指定，将布尔结果解码为 item IDs
-
-用户属性编码在 Python 侧完成 (`python -m torch_recall encode-user`)。
-
-## 演示数据
-
-8 条 item 定向规则，涵盖三种字段类型:
-
-- **离散字段**: city (北京/上海/广州), gender (男/女)
-- **数值字段**: age, price
-- **文本字段**: tags (空格分词)
-
-## 演示规则
-
-| 规则 | 说明 |
-|---|---|
-| `city == "北京" AND gender == "男"` | 定向北京男性 |
-| `city == "上海"` | 定向上海用户 |
-| `age > 18` | 定向成年用户 |
-| `(city == "北京" OR city == "上海") AND age >= 25` | 定向北京/上海 25+ 用户 |
-| `tags contains "游戏"` | 定向游戏用户 |
-| `price < 100.0 AND tags contains "美食"` | 定向价格敏感美食用户 |
-| `city != "广州"` | 定向非广州用户 |
-| `(city == "广州" AND gender == "女") OR age > 30` | 定向广州女性或 30+ 用户 |

@@ -1,29 +1,49 @@
 # torch-recall
 
-基于 PyTorch 的召回框架。每种召回方法实现为 `nn.Module`，通过 AOTInductor 导出为 `.pt2` 模型包，支持 C++/Python 在线推理。
-
-当前已实现 **定向召回 (Targeting Recall)**：item 携带定向规则（布尔表达式），给定用户标签，高效匹配所有符合条件的 item。
+基于 PyTorch 的召回框架。每种召回方法实现为统一的 `RecallOp`（`nn.Module`），通过声明式组合（`And` / `Or`）灵活编排，经 AOTInductor 导出为单一 `.pt2` 模型包，支持 C++/Python 在线推理。
 
 ## 架构概览
 
 ```
-共享组件                                    召回方法 (可扩展)
-┌──────────────────────────────────┐      ┌──────────────────────────────┐
-│  Schema          字段类型定义     │      │  targeting/                  │
-│  query/          布尔表达式解析   │      │    TargetingRecall (Module)  │
-│  scheduler/      torch.export    │      │    TargetingBuilder          │
-│  tokenizer       分词器          │      │    encode_user               │
-│                                  │  .pt2 ├──────────────────────────────┤
-│  inference_engine/               │──────→│  knn/ (planned)             │
-│    通用 C++ 推理引擎              │      ├──────────────────────────────┤
-│                                  │      │  ann/ (planned)             │
-└──────────────────────────────────┘      └──────────────────────────────┘
+共享组件                              召回方法 (RecallOp)
+┌─────────────────────────────┐    ┌─────────────────────────────┐
+│  Schema / Item  数据定义     │    │  targeting/                 │
+│  RecallOp       统一算子接口  │    │    TargetingRecall          │
+│  query/         表达式解析   │    │    TargetingBuilder          │
+│  tokenizer      分词器       │    │    encode_user               │
+│                              │    ├─────────────────────────────┤
+│  scheduler/     声明式组合   │    │  knn/                       │
+│    And / Or     交集 / 并集  │    │    KNNRecall                │
+│    Pipeline     topk 输出    │    │    KNNBuilder               │
+│    exporter     .pt2 导出    │    │    encode_query             │
+│                              │    ├─────────────────────────────┤
+│  inference_engine/           │    │  ann/ (planned)             │
+│    通用 C++ 推理引擎          │    │    ANNRecall                │
+└─────────────────────────────┘    └─────────────────────────────┘
 ```
 
-每种召回方法遵循 **Builder → Module → Encoder** 模式：
-1. **Builder**: 离线构建索引，生成 `nn.Module` + meta JSON
-2. **Module** (`nn.Module`): `forward()` 纯 tensor 操作，可编译导出
-3. **Encoder**: 将业务输入编码为 `forward()` 所需的 tensor
+### 统一算子接口
+
+所有召回方法实现相同的 `forward` 签名：
+
+```python
+class RecallOp(nn.Module):
+    def forward(self, pred_satisfied: Tensor, query: Tensor) -> Tensor:
+        # [P] bool, [1, D] float -> [1, N] float
+```
+
+- **Targeting**: 返回 `0.0`（匹配）/ `-inf`（不匹配），忽略 `query`
+- **KNN**: 返回相似度分数，忽略 `pred_satisfied`
+- **And**: `sum(children)` — `-inf` 使不匹配项自然被排除
+- **Or**: `max(children)` — 任一子节点匹配即包含
+
+### Builder → RecallOp → Encoder 模式
+
+| 组件 | 职责 |
+|------|------|
+| **Builder** | 离线构建索引，生成 `RecallOp` + meta JSON |
+| **RecallOp** (`nn.Module`) | `forward()` 纯 tensor 操作，可编译导出 |
+| **Encoder** | 将业务输入编码为 `forward()` 所需的 tensor |
 
 ## 环境准备
 
@@ -36,78 +56,96 @@ uv pip install torch pytest jieba
 uv pip install -e "index_model[dev]"
 ```
 
-## 快速上手 — 定向召回
+## 快速上手 — 声明式 Pipeline
 
-### 1. 离线构建定向索引
+最推荐的使用方式：通过 `And` / `Or` 声明式组合多种召回方法，导出为单一模型。
 
 ```python
-from torch_recall.schema import Schema
+from torch_recall.schema import Schema, Item
+from torch_recall.scheduler import (
+    And, Or, Targeting, KNN,
+    PipelineBuilder, export_recall_model, encode_pipeline_inputs,
+)
+
+# 1. 定义 Schema
+schema = Schema(discrete_fields=["city"], numeric_fields=["age"])
+
+# 2. 准备 Item（同时携带定向规则和 embedding）
+items = [
+    Item(id="item-0", targeting_rule='city == "北京"', embedding=[0.9, 0.1, 0.0]),
+    Item(id="item-1", targeting_rule='city == "上海"', embedding=[0.1, 0.9, 0.0]),
+    Item(id="item-2", targeting_rule='age > 18',       embedding=[0.5, 0.5, 0.5]),
+]
+
+# 3. 声明组合方式
+spec = And(Targeting(schema), KNN(metric="cosine"))  # 定向过滤 + KNN 排序
+
+# 4. 构建 + 导出
+builder = PipelineBuilder(spec, k=2)
+pipeline, meta = builder.build(items)
+export_recall_model(pipeline, "pipeline.pt2")
+
+# 5. 在线查询
+pred_satisfied, query = encode_pipeline_inputs(
+    user_attrs={"city": "北京", "age": 25},
+    query_vectors=[[0.8, 0.2, 0.0]],
+    meta=meta,
+)
+top_scores, top_indices = pipeline(pred_satisfied, query)
+```
+
+### 更多组合方式
+
+```python
+# 多路 KNN 取并集
+spec = Or(KNN(metric="cosine"), KNN(metric="l2"))
+
+# 复杂嵌套: (定向 AND 文本KNN) OR 图像KNN
+spec = Or(
+    And(Targeting(schema), KNN(metric="cosine")),
+    KNN(metric="inner_product"),
+)
+```
+
+## 单独使用 — Targeting
+
+```python
+from torch_recall.schema import Schema, Item
 from torch_recall.recall_method.targeting.builder import TargetingBuilder
 from torch_recall.scheduler.exporter import export_recall_model
 
-schema = Schema(
-    discrete_fields=["city", "gender"],
-    numeric_fields=["age", "price"],
-    text_fields=["tags"],
-)
-
-rules = [
-    'city == "北京" AND gender == "男"',
-    'city == "上海"',
-    "age > 18",
-    '(city == "北京" OR city == "上海") AND age >= 25',
-    'tags contains "游戏"',
-    'price < 100.0 AND tags contains "美食"',
-    'city != "广州"',
-    '(city == "广州" AND gender == "女") OR age > 30',
+schema = Schema(discrete_fields=["city", "gender"], numeric_fields=["age"])
+items = [
+    Item(id="ad-0", targeting_rule='city == "北京" AND gender == "男"'),
+    Item(id="ad-1", targeting_rule='city == "上海"'),
+    Item(id="ad-2", targeting_rule='age > 18'),
 ]
 
 builder = TargetingBuilder(schema)
-model, meta = builder.build(rules)
+model, meta = builder.build(items)
 
-builder.save_meta(meta, "targeting_meta.json")
-export_recall_model(model, "targeting_model.pt2")
+result = model.query({"city": "北京", "gender": "男", "age": 30}, meta)
+matched = [i for i in range(len(items)) if result[i].item()]
+# → [0, 2]
 ```
 
-### 2. Python 查询
+## 单独使用 — KNN
 
 ```python
-model.eval()
-result = model.query(
-    {"city": "北京", "gender": "男", "age": 30, "tags": "游戏 科技"},
-    meta,
-)
-matched = [i for i in range(len(rules)) if result[i].item()]
-print(f"匹配的 item: {matched}")
-# → 匹配的 item: [0, 2, 3, 4, 6]
-```
+from torch_recall.schema import Item
+from torch_recall.recall_method.knn.builder import KNNBuilder
 
-### 3. C++ 查询
+items = [
+    Item(id="doc-0", embedding=[1.0, 0.0, 0.0]),
+    Item(id="doc-1", embedding=[0.0, 1.0, 0.0]),
+    Item(id="doc-2", embedding=[0.7, 0.7, 0.0]),
+]
 
-```bash
-# 编译推理引擎
-cd inference_engine && mkdir -p build && cd build
-cmake -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')" ..
-cmake --build . --config Release
-```
+builder = KNNBuilder(k=2, metric="cosine")
+model, meta = builder.build(items)
 
-```bash
-# Python 侧编码用户属性为张量文件
-python -m torch_recall encode-user \
-    --user '{"city":"北京","gender":"男","age":30,"tags":"游戏 科技"}' \
-    --meta targeting_meta.json \
-    --output tensors.pt
-
-# C++ 通用推理
-./torch_recall_cli targeting_model.pt2 tensors.pt --num-items 8
-```
-
-### 4. 完整演示
-
-```bash
-PYTHONPATH=index_model python examples/01_build_targeting.py   # 离线: 构建索引 + 导出
-PYTHONPATH=index_model python examples/02_query_targeting.py   # 在线: Python 推理
-bash examples/03_targeting_cpp.sh                              # 在线: C++ 推理
+scores, indices = model.query([0.9, 0.1, 0.0], meta)
+# → indices: [0, 2]  (最相似的两个)
 ```
 
 ## 规则语法
@@ -127,55 +165,51 @@ city == "北京" OR city == "上海"                     # OR
 **运算符**: `==`  `!=`  `<`  `>`  `<=`  `>=`  `contains`
 **连接词**: `AND`  `OR`  `NOT`  `(`  `)`
 
+## 完整演示
+
+```bash
+# Targeting 单独使用
+PYTHONPATH=index_model python examples/01_build_targeting.py
+PYTHONPATH=index_model python examples/02_query_targeting.py
+
+# Pipeline: Targeting + KNN 取交集
+PYTHONPATH=index_model python examples/04_pipeline_and.py
+
+# C++ 推理
+bash examples/03_targeting_cpp.sh
+```
+
 ## 项目结构
 
 ```
 torch-recall/
-├── index_model/                         Index Model (索引模型)
-│   ├── pyproject.toml
-│   ├── torch_recall/
-│   │   ├── __init__.py                  公共 API
-│   │   ├── __main__.py                  CLI (encode-user)
-│   │   ├── schema.py                    共享: 字段类型、编译期常量
-│   │   ├── tokenizer.py                 共享: 分词器 (空格 / jieba)
-│   │   ├── scheduler/
-│   │   │   └── exporter.py              共享: 通用 .pt2 导出
-│   │   ├── recall_method/
-│   │   │   └── targeting/               定向召回
-│   │   │       ├── recall.py            TargetingRecall (nn.Module)
-│   │   │       ├── builder.py           TargetingBuilder
-│   │   │       └── encoder.py           encode_user / save_user_tensors
-│   │   └── query/                       共享: 查询解析
-│   │       ├── parser.py                AST + 递归下降解析器
-│   │       └── dnf.py                   DNF 转换
-│   └── tests/
-├── inference_engine/                    共享: 通用 C++ 推理引擎
-│   ├── CMakeLists.txt                   Torch only (无第三方依赖)
-│   ├── include/torch_recall/
-│   │   ├── model_runner.h               run(vector<Tensor>) → Tensor
-│   │   └── result_decoder.h             bool tensor → item IDs
-│   └── src/
-│       ├── main.cpp                     通用 CLI: load .pt2 + tensors.pt
-│       ├── model_runner.cpp
-│       └── result_decoder.cpp
+├── index_model/
+│   └── torch_recall/
+│       ├── schema.py                    Schema, Item 数据定义
+│       ├── recall_method/
+│       │   ├── base.py                  RecallOp 统一算子基类
+│       │   ├── targeting/               定向召回
+│       │   │   ├── recall.py            TargetingRecall(RecallOp)
+│       │   │   ├── builder.py           TargetingBuilder
+│       │   │   └── encoder.py           encode_user
+│       │   └── knn/                     K 近邻召回
+│       │       ├── recall.py            KNNRecall(RecallOp)
+│       │       ├── builder.py           KNNBuilder
+│       │       └── encoder.py           encode_query
+│       ├── scheduler/
+│       │   ├── spec.py                  Targeting, KNN, And, Or 声明式 spec
+│       │   ├── pipeline.py              AndModule, OrModule, RecallPipeline
+│       │   ├── pipeline_builder.py      PipelineBuilder: spec → nn.Module
+│       │   ├── encoder.py               encode_pipeline_inputs
+│       │   └── exporter.py              通用 .pt2 导出
+│       ├── query/                       布尔表达式解析 + DNF
+│       └── tokenizer.py                 分词器
+├── inference_engine/                    通用 C++ 推理引擎
 ├── examples/                            端到端演示
 └── docs/
     ├── architecture.md                  框架架构
-    └── targeting/                       定向召回
-        ├── design.md                    设计与优化策略
-        ├── implementation.md            模块实现参考
-        ├── walkthrough.md              端到端示例详解
-        └── benchmark.md                性能测试结果
+    └── targeting/                       定向召回文档
 ```
-
-## 系统参数 (Targeting)
-
-| 常量 | 值 | 含义 |
-|------|---|------|
-| `MAX_PREDS_PER_CONJ` | 8 | 单条 conjunction 最大谓词数 |
-| `MAX_CONJ_PER_ITEM` | 16 | 单个 item 最大 conjunction 数 |
-
-所有参数为编译期常量，修改后需重新构建索引并导出 `.pt2`。
 
 ## 文档
 

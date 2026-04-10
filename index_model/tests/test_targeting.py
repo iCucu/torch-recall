@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from torch_recall.schema import Schema
+from torch_recall.schema import Item, Schema
 from torch_recall.recall_method.targeting.builder import TargetingBuilder
 from torch_recall.recall_method.targeting.encoder import encode_user
 from torch_recall.scheduler.exporter import export_recall_model
@@ -27,23 +27,23 @@ SCHEMA = Schema(
     text_fields=["tags"],
 )
 
-RULES = [
+ITEMS = [
     # 0: targets 北京 males
-    'city == "北京" AND gender == "男"',
+    Item(id="item-0", targeting_rule='city == "北京" AND gender == "男"'),
     # 1: targets anyone in 上海
-    'city == "上海"',
+    Item(id="item-1", targeting_rule='city == "上海"'),
     # 2: targets age > 18
-    "age > 18",
+    Item(id="item-2", targeting_rule="age > 18"),
     # 3: targets 北京 OR 上海 with age >= 25
-    '(city == "北京" OR city == "上海") AND age >= 25',
+    Item(id="item-3", targeting_rule='(city == "北京" OR city == "上海") AND age >= 25'),
     # 4: targets users whose tags contain 游戏
-    'tags contains "游戏"',
+    Item(id="item-4", targeting_rule='tags contains "游戏"'),
     # 5: targets price < 100 AND tags contain 美食
-    'price < 100.0 AND tags contains "美食"',
+    Item(id="item-5", targeting_rule='price < 100.0 AND tags contains "美食"'),
     # 6: targets NOT 广州 (i.e. city != 广州)
-    'city != "广州"',
+    Item(id="item-6", targeting_rule='city != "广州"'),
     # 7: targets 广州 females OR anyone with age > 30
-    '(city == "广州" AND gender == "女") OR age > 30',
+    Item(id="item-7", targeting_rule='(city == "广州" AND gender == "女") OR age > 30'),
 ]
 
 USERS_AND_EXPECTED = [
@@ -75,15 +75,15 @@ USERS_AND_EXPECTED = [
 class TestBuilder:
     def test_build_returns_model_and_meta(self):
         builder = TargetingBuilder(SCHEMA)
-        model, meta = builder.build(RULES)
+        model, meta = builder.build(ITEMS)
         assert isinstance(model, torch.nn.Module)
-        assert meta["num_items"] == len(RULES)
+        assert meta["num_items"] == len(ITEMS)
         assert meta["num_preds"] > 0
         assert meta["num_conjs"] > 0
 
     def test_predicate_registry_has_all_types(self):
         builder = TargetingBuilder(SCHEMA)
-        _, meta = builder.build(RULES)
+        _, meta = builder.build(ITEMS)
         reg = meta["predicate_registry"]
         assert "city" in reg["discrete"]
         assert len(reg["numeric"]) > 0
@@ -91,18 +91,61 @@ class TestBuilder:
 
     def test_model_buffers_shapes(self):
         builder = TargetingBuilder(SCHEMA)
-        model, meta = builder.build(RULES)
+        model, meta = builder.build(ITEMS)
         C = meta["num_conjs"]
         N = meta["num_items"]
         assert model.conj_pred_ids.shape[0] == C
         assert model.item_conj_ids.shape[0] == N
 
-    def test_too_many_preds_per_conj_raises(self):
+    def test_adaptive_k_fits_actual_data(self):
+        schema = Schema(discrete_fields=[f"f{i}" for i in range(12)])
+        rule = " AND ".join(f'f{i} == "v"' for i in range(12))
+        builder = TargetingBuilder(schema)
+        model, meta = builder.build([Item(targeting_rule=rule)])
+        assert meta["max_preds_per_conj"] == 12
+        assert model.conj_pred_ids.shape[1] == 12
+
+    def test_adaptive_j_fits_actual_data(self):
+        """OR of 5 predicates → 5 conjunctions (each single-predicate)."""
+        schema = Schema(discrete_fields=["city"])
+        rule = " OR ".join(f'city == "c{i}"' for i in range(5))
+        builder = TargetingBuilder(schema)
+        model, meta = builder.build([Item(targeting_rule=rule)])
+        assert meta["max_conj_per_item"] == 5
+        assert model.item_conj_ids.shape[1] == 5
+
+    def test_upper_bound_k_enforced(self):
         schema = Schema(discrete_fields=[f"f{i}" for i in range(10)])
         rule = " AND ".join(f'f{i} == "v"' for i in range(10))
-        builder = TargetingBuilder(schema)
-        with pytest.raises(ValueError, match="max"):
-            builder.build([rule])
+        builder = TargetingBuilder(schema, max_preds_per_conj=8)
+        with pytest.raises(ValueError, match="max_preds_per_conj"):
+            builder.build([Item(targeting_rule=rule)])
+
+    def test_upper_bound_j_enforced(self):
+        schema = Schema(discrete_fields=["city"])
+        rule = " OR ".join(f'city == "c{i}"' for i in range(20))
+        builder = TargetingBuilder(schema, max_conj_per_item=10)
+        with pytest.raises(ValueError, match="max_conj_per_item"):
+            builder.build([Item(targeting_rule=rule)])
+
+    def test_meta_contains_k_j(self):
+        builder = TargetingBuilder(SCHEMA)
+        _, meta = builder.build(ITEMS)
+        assert "max_preds_per_conj" in meta
+        assert "max_conj_per_item" in meta
+        assert meta["max_preds_per_conj"] >= 1
+        assert meta["max_conj_per_item"] >= 1
+
+    def test_missing_targeting_rule_raises(self):
+        builder = TargetingBuilder(SCHEMA)
+        with pytest.raises(ValueError, match="targeting_rule is None"):
+            builder.build([Item(embedding=[1.0, 2.0])])
+
+    def test_meta_item_ids(self):
+        builder = TargetingBuilder(SCHEMA)
+        _, meta = builder.build(ITEMS)
+        assert meta["item_ids"] is not None
+        assert meta["item_ids"][0] == "item-0"
 
 
 # ── Unit tests: encoder ──────────────────────────────────────────────────────
@@ -111,7 +154,7 @@ class TestEncoder:
     @pytest.fixture()
     def meta(self):
         builder = TargetingBuilder(SCHEMA)
-        _, meta = builder.build(RULES)
+        _, meta = builder.build(ITEMS)
         return meta
 
     def test_encode_returns_correct_size(self, meta):
@@ -157,7 +200,7 @@ class TestE2E:
     @pytest.fixture(scope="class")
     def model_and_meta(self):
         builder = TargetingBuilder(SCHEMA)
-        model, meta = builder.build(RULES)
+        model, meta = builder.build(ITEMS)
         model.eval()
         return model, meta
 
@@ -169,7 +212,7 @@ class TestE2E:
     def test_query(self, model_and_meta, user, expected):
         model, meta = model_and_meta
         result = model.query(user, meta)
-        matched = sorted(i for i in range(len(RULES)) if result[i].item())
+        matched = sorted(i for i in range(len(ITEMS)) if result[i].item())
         assert matched == expected
 
     @pytest.mark.parametrize(
@@ -179,11 +222,55 @@ class TestE2E:
     )
     def test_forward_matches_query(self, model_and_meta, user, expected):
         model, meta = model_and_meta
-        pred_satisfied = encode_user(user, meta)
+        pred_satisfied = encode_user(user, meta).unsqueeze(0)  # [1, P]
+        dummy_query = torch.zeros(1, 1)
         with torch.no_grad():
-            result = model(pred_satisfied)
-        matched = sorted(i for i in range(len(RULES)) if result[i].item())
+            scores = model(pred_satisfied, dummy_query)  # [1, N] float
+        matched = sorted(
+            i for i in range(len(ITEMS)) if scores[0, i].item() > float("-inf")
+        )
         assert matched == expected
+
+
+# ── Batch tests ──────────────────────────────────────────────────────────────
+
+class TestBatch:
+    @pytest.fixture(scope="class")
+    def model_and_meta(self):
+        builder = TargetingBuilder(SCHEMA)
+        model, meta = builder.build(ITEMS)
+        model.eval()
+        return model, meta
+
+    def test_batch_forward(self, model_and_meta):
+        model, meta = model_and_meta
+        users = [u for u, _ in USERS_AND_EXPECTED]
+        expected_all = [e for _, e in USERS_AND_EXPECTED]
+        B = len(users)
+
+        batch_pred = torch.stack(
+            [encode_user(u, meta) for u in users]
+        )  # [B, P]
+        dummy_query = torch.zeros(B, 1)
+        with torch.no_grad():
+            scores = model(batch_pred, dummy_query)  # [B, N]
+        assert scores.shape == (B, len(ITEMS))
+
+        for b in range(B):
+            matched = sorted(
+                i for i in range(len(ITEMS)) if scores[b, i].item() > float("-inf")
+            )
+            assert matched == expected_all[b]
+
+    def test_batch_single_equals_unbatched(self, model_and_meta):
+        model, meta = model_and_meta
+        user = USERS_AND_EXPECTED[0][0]
+        pred = encode_user(user, meta)  # [P]
+        single_batch = pred.unsqueeze(0)  # [1, P]
+        dummy_q = torch.zeros(1, 1)
+        with torch.no_grad():
+            batch_scores = model(single_batch, dummy_q)  # [1, N]
+        assert batch_scores.shape == (1, len(ITEMS))
 
 
 # ── Export test ───────────────────────────────────────────────────────────────
@@ -191,7 +278,7 @@ class TestE2E:
 class TestExport:
     def test_export_and_reload(self):
         builder = TargetingBuilder(SCHEMA)
-        model, meta = builder.build(RULES)
+        model, meta = builder.build(ITEMS)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             pt2_path = os.path.join(tmpdir, "model.pt2")
@@ -206,7 +293,7 @@ class TestCppIntegration:
     @pytest.fixture(scope="class")
     def exported_artifacts(self):
         builder = TargetingBuilder(SCHEMA)
-        model, meta = builder.build(RULES)
+        model, meta = builder.build(ITEMS)
         model.eval()
 
         tmpdir = tempfile.mkdtemp(prefix="torch_recall_targeting_")
@@ -250,7 +337,7 @@ class TestCppIntegration:
         tmpdir, model, meta, _, pt2_path = exported_artifacts
 
         py_result = model.query(user, meta)
-        py_matched = sorted(i for i in range(len(RULES)) if py_result[i].item())
+        py_matched = sorted(i for i in range(len(ITEMS)) if py_result[i].item())
 
         tensors_path = os.path.join(tmpdir, "tensors.pt")
         model.save_user_tensors(user, meta, tensors_path)

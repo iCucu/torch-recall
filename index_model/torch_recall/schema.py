@@ -42,7 +42,18 @@ class Schema:
         return {name: i for i, name in enumerate(self.text_fields)}
 
 
-# Targeting recall constants
-MAX_PREDS_PER_CONJ = 8   # K: max predicates in one conjunction
-MAX_CONJ_PER_ITEM = 16   # J: max conjunctions per item
-MAX_CONJ = 1024           # system-level limit: max conjunctions per DNF expansion
+@dataclass
+class Item:
+    """Unified item definition shared across all recall methods.
+
+    Each field is optional — an item only needs to populate the fields
+    relevant to the recall methods it participates in.
+    """
+
+    id: str | None = None
+    targeting_rule: str | None = None
+    embedding: list[float] | None = None
+
+
+# DNF expansion safety limit (prevents combinatorial explosion during parsing)
+MAX_CONJ = 1024

@@ -5,12 +5,7 @@ from dataclasses import dataclass
 
 import torch
 
-from torch_recall.schema import (
-    Schema,
-    MAX_PREDS_PER_CONJ,
-    MAX_CONJ_PER_ITEM,
-    MAX_CONJ,
-)
+from torch_recall.schema import Item, Schema, MAX_CONJ
 from torch_recall.query.parser import Predicate, parse_expr
 from torch_recall.query.dnf import to_dnf, LiteralPred
 from torch_recall.recall_method.targeting.recall import TargetingRecall
@@ -25,21 +20,36 @@ class TargetingBuilder:
     Each item is a boolean expression string using the standard query syntax.
     """
 
-    def __init__(self, schema: Schema):
+    def __init__(
+        self,
+        schema: Schema,
+        max_preds_per_conj: int | None = None,
+        max_conj_per_item: int | None = None,
+    ):
+        """
+        Args:
+            schema: field type definitions.
+            max_preds_per_conj: optional upper bound for K. If None, K is
+                determined adaptively from the actual rules.
+            max_conj_per_item: optional upper bound for J. If None, J is
+                determined adaptively from the actual rules.
+        """
         self.schema = schema
         self._discrete_fields = set(schema.discrete_fields)
         self._numeric_fields = set(schema.numeric_fields)
         self._text_fields = set(schema.text_fields)
+        self._max_k = max_preds_per_conj
+        self._max_j = max_conj_per_item
 
-    def build(self, rules: list[str]) -> tuple[TargetingRecall, dict]:
+    def build(self, items: list[Item]) -> tuple[TargetingRecall, dict]:
         """Parse item targeting rules and build the model + meta.
 
         Args:
-            rules: one boolean expression string per item.
+            items: list of Item objects, each must have targeting_rule set.
         Returns:
             (model, meta) tuple.
         """
-        N = len(rules)
+        N = len(items)
 
         # --- Phase 1: parse rules → DNFs, build predicate registry ---
         pred_key_to_id: dict[tuple, int] = {}
@@ -48,7 +58,12 @@ class TargetingBuilder:
         # per-item: list of conjunctions, each conjunction is list of (pred_id, negated)
         item_conjs: list[list[list[tuple[int, bool]]]] = []
 
-        for item_idx, rule_str in enumerate(rules):
+        for item_idx, item in enumerate(items):
+            rule_str = item.targeting_rule
+            if rule_str is None:
+                raise ValueError(
+                    f"Item {item_idx}: targeting_rule is None"
+                )
             expr = parse_expr(rule_str)
             dnf = to_dnf(expr)
             if len(dnf) > MAX_CONJ:
@@ -65,25 +80,30 @@ class TargetingBuilder:
                         lit, pred_key_to_id, pred_list
                     )
                     preds_in_conj.append((pred_id, negated))
-
-                if len(preds_in_conj) > MAX_PREDS_PER_CONJ:
-                    raise ValueError(
-                        f"Item {item_idx}: conjunction has "
-                        f"{len(preds_in_conj)} predicates "
-                        f"(max {MAX_PREDS_PER_CONJ})"
-                    )
                 conjs_for_item.append(preds_in_conj)
-
-            if len(conjs_for_item) > MAX_CONJ_PER_ITEM:
-                raise ValueError(
-                    f"Item {item_idx}: {len(conjs_for_item)} conjunctions "
-                    f"(max {MAX_CONJ_PER_ITEM})"
-                )
             item_conjs.append(conjs_for_item)
 
         P = len(pred_list)
-        K = MAX_PREDS_PER_CONJ
-        J = MAX_CONJ_PER_ITEM
+
+        # Adaptive K/J: scan actual data, apply optional upper bounds
+        actual_k = max(
+            (len(conj) for conjs in item_conjs for conj in conjs), default=1
+        )
+        actual_j = max((len(conjs) for conjs in item_conjs), default=1)
+
+        K = actual_k if self._max_k is None else self._max_k
+        J = actual_j if self._max_j is None else self._max_j
+
+        if actual_k > K:
+            raise ValueError(
+                f"Conjunction has {actual_k} predicates "
+                f"(max_preds_per_conj={K})"
+            )
+        if actual_j > J:
+            raise ValueError(
+                f"Item has {actual_j} conjunctions "
+                f"(max_conj_per_item={J})"
+            )
 
         # --- Phase 2: build conjunction tensors ---
         all_conj_preds: list[list[tuple[int, bool]]] = []
@@ -134,10 +154,16 @@ class TargetingBuilder:
                     str(pred["value"])
                 ] = pred["pred_id"]
 
+        raw_ids = [item.id for item in items]
+        item_ids = raw_ids if any(i is not None for i in raw_ids) else None
+
         meta = {
             "num_items": N,
             "num_preds": P,
             "num_conjs": C,
+            "max_preds_per_conj": K,
+            "max_conj_per_item": J,
+            "item_ids": item_ids,
             "predicate_registry": {
                 "discrete": discrete_registry,
                 "numeric": numeric_registry,
