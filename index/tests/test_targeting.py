@@ -16,7 +16,7 @@ from torch_recall.recall_method.targeting.builder import TargetingBuilder
 from torch_recall.recall_method.targeting.encoder import encode_user
 from torch_recall.scheduler.exporter import export_recall_model
 
-CPP_CLI = Path(__file__).resolve().parents[2] / "inference_engine" / "build" / "torch_recall_cli"
+CPP_CLI = Path(__file__).resolve().parents[2] / "Inference" / "build" / "torch_recall_cli"
 
 
 # ── Test data ────────────────────────────────────────────────────────────────

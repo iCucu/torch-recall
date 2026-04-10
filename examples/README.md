@@ -62,16 +62,16 @@ cd torch-recall
 source .venv/bin/activate
 
 # 1. 离线: 构建定向索引 + 导出模型
-PYTHONPATH=index_model python examples/01_build_targeting.py
+PYTHONPATH=index python examples/01_build_targeting.py
 
 # 2. 在线: Python 推理
-PYTHONPATH=index_model python examples/02_query_targeting.py
+PYTHONPATH=index python examples/02_query_targeting.py
 
 # 3. 在线: C++ 推理 (需先编译)
 bash examples/03_targeting_cpp.sh
 
 # 4. Pipeline: Targeting + KNN 取交集
-PYTHONPATH=index_model python examples/04_pipeline_and.py
+PYTHONPATH=index python examples/04_pipeline_and.py
 ```
 
 ## 产出文件

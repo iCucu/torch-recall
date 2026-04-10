@@ -1,0 +1,72 @@
+{
+  "k": 3,
+  "num_items": 6,
+  "num_preds": 6,
+  "total_query_dim": 4,
+  "item_ids": [
+    "北京烤鸭店",
+    "上海本帮菜馆",
+    "全国连锁火锅",
+    "高端日料",
+    "学生优惠套餐",
+    "北京女性SPA"
+  ],
+  "targeting": {
+    "num_items": 6,
+    "num_preds": 6,
+    "num_conjs": 6,
+    "max_preds_per_conj": 2,
+    "max_conj_per_item": 1,
+    "item_ids": [
+      "北京烤鸭店",
+      "上海本帮菜馆",
+      "全国连锁火锅",
+      "高端日料",
+      "学生优惠套餐",
+      "北京女性SPA"
+    ],
+    "predicate_registry": {
+      "discrete": {
+        "city": {
+          "北京": 0,
+          "上海": 1
+        },
+        "gender": {
+          "女": 5
+        }
+      },
+      "numeric": [
+        {
+          "pred_id": 2,
+          "type": "numeric",
+          "field": "age",
+          "op": ">",
+          "value": 18.0
+        },
+        {
+          "pred_id": 3,
+          "type": "numeric",
+          "field": "age",
+          "op": ">=",
+          "value": 25.0
+        },
+        {
+          "pred_id": 4,
+          "type": "numeric",
+          "field": "age",
+          "op": ">",
+          "value": 10.0
+        }
+      ],
+      "text": {}
+    }
+  },
+  "knn_leaves": [
+    {
+      "offset": 0,
+      "dim": 4,
+      "metric": "inner_product",
+      "weight": 1.0
+    }
+  ]
+}

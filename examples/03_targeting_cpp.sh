@@ -15,14 +15,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-CLI="$ROOT_DIR/inference_engine/build/torch_recall_cli"
+CLI="$ROOT_DIR/Inference/build/torch_recall_cli"
 MODEL="$SCRIPT_DIR/output/targeting_model.pt2"
 META="$SCRIPT_DIR/output/targeting_meta.json"
 TENSORS="$SCRIPT_DIR/output/targeting_tensors.pt"
 
 if [ ! -f "$CLI" ]; then
     echo "错误: C++ CLI 未编译。请先运行:"
-    echo "  cd inference_engine && mkdir -p build && cd build"
+    echo "  cd Inference && mkdir -p build && cd build"
     echo "  cmake -DCMAKE_PREFIX_PATH=\"\$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')\" .."
     echo "  cmake --build . --config Release"
     exit 1
@@ -30,7 +30,7 @@ fi
 
 if [ ! -f "$MODEL" ] || [ ! -f "$META" ]; then
     echo "错误: 模型或元数据文件不存在。请先运行:"
-    echo "  PYTHONPATH=index_model python examples/01_build_targeting.py"
+    echo "  PYTHONPATH=index python examples/01_build_targeting.py"
     exit 1
 fi
 
@@ -52,7 +52,7 @@ for u in "${users[@]}"; do
     echo "用户: $u"
     echo "----------------------------------------------------------------------"
 
-    PYTHONPATH="$ROOT_DIR/index_model" python3 -m torch_recall encode-user --user "$u" --meta "$META" --output "$TENSORS"
+    PYTHONPATH="$ROOT_DIR/index" python3 -m torch_recall encode-user --user "$u" --meta "$META" --output "$TENSORS"
     "$CLI" "$MODEL" "$TENSORS"
 done
 

@@ -17,7 +17,7 @@
 
 运行:
     cd torch-recall
-    PYTHONPATH=index_model python index_model/benchmarks/bench_comparison.py
+    PYTHONPATH=index python index/benchmarks/bench_comparison.py
 
 依赖:
     pip install pyroaring   (已在环境中)

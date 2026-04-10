@@ -13,14 +13,14 @@ cd torch-recall
 source .venv/bin/activate
 
 # 核心性能测试 (构建、内存、延迟)
-PYTHONPATH=index_model python index_model/benchmarks/bench_targeting.py
+PYTHONPATH=index python index/benchmarks/bench_targeting.py
 
 # 方案对比 (暴力Python / pyroaring / torch-recall)
-PYTHONPATH=index_model python index_model/benchmarks/bench_comparison.py
+PYTHONPATH=index python index/benchmarks/bench_comparison.py
 
 # 加 --large 运行 1M 规模
-PYTHONPATH=index_model python index_model/benchmarks/bench_targeting.py --large
-PYTHONPATH=index_model python index_model/benchmarks/bench_comparison.py --large
+PYTHONPATH=index python index/benchmarks/bench_targeting.py --large
+PYTHONPATH=index python index/benchmarks/bench_comparison.py --large
 ```
 
 ---

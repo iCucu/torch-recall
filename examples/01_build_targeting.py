@@ -9,7 +9,7 @@ Step 1 — 定向召回: 离线构建
 运行方式:
     cd torch-recall
     source .venv/bin/activate
-    PYTHONPATH=index_model python examples/01_build_targeting.py
+    PYTHONPATH=index python examples/01_build_targeting.py
 
 产出 (写入 examples/output/):
     - targeting_model.pt2      AOTInductor 编译后的定向召回模型

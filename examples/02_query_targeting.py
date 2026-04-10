@@ -6,7 +6,7 @@ Step 2 — 定向召回: Python 在线匹配
 加载离线产出的模型和元数据，用 Python 为不同用户查找匹配的定向规则。
 
 运行方式 (需先跑 01_build_targeting.py):
-    PYTHONPATH=index_model python examples/02_query_targeting.py
+    PYTHONPATH=index python examples/02_query_targeting.py
 """
 
 import json

@@ -17,7 +17,7 @@
 │    Pipeline     topk 输出    │    │    KNNBuilder               │
 │    exporter     .pt2 导出    │    │    encode_query             │
 │                              │    ├─────────────────────────────┤
-│  inference_engine/           │    │  ann/ (planned)             │
+│  Inference/           │    │  ann/ (planned)             │
 │    通用 C++ 推理引擎          │    │    ANNRecall                │
 └─────────────────────────────┘    └─────────────────────────────┘
 ```
@@ -53,7 +53,7 @@ git clone <repo> && cd torch-recall
 uv venv --python 3.12 .venv
 source .venv/bin/activate
 uv pip install torch pytest jieba
-uv pip install -e "index_model[dev]"
+uv pip install -e "index[dev]"
 ```
 
 ## 快速上手 — 声明式 Pipeline
@@ -169,11 +169,11 @@ city == "北京" OR city == "上海"                     # OR
 
 ```bash
 # Targeting 单独使用
-PYTHONPATH=index_model python examples/01_build_targeting.py
-PYTHONPATH=index_model python examples/02_query_targeting.py
+PYTHONPATH=index python examples/01_build_targeting.py
+PYTHONPATH=index python examples/02_query_targeting.py
 
 # Pipeline: Targeting + KNN 取交集
-PYTHONPATH=index_model python examples/04_pipeline_and.py
+PYTHONPATH=index python examples/04_pipeline_and.py
 
 # C++ 推理
 bash examples/03_targeting_cpp.sh
@@ -183,7 +183,7 @@ bash examples/03_targeting_cpp.sh
 
 ```
 torch-recall/
-├── index_model/
+├── index/
 │   └── torch_recall/
 │       ├── schema.py                    Schema, Item 数据定义
 │       ├── recall_method/
@@ -204,7 +204,7 @@ torch-recall/
 │       │   └── exporter.py              通用 .pt2 导出
 │       ├── query/                       布尔表达式解析 + DNF
 │       └── tokenizer.py                 分词器
-├── inference_engine/                    通用 C++ 推理引擎
+├── Inference/                    通用 C++ 推理引擎
 ├── examples/                            端到端演示
 └── docs/
     ├── architecture.md                  框架架构

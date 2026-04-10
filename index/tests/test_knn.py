@@ -18,7 +18,7 @@ from torch_recall.scheduler.exporter import export_recall_model
 
 CPP_CLI = (
     Path(__file__).resolve().parents[2]
-    / "inference_engine"
+    / "Inference"
     / "build"
     / "torch_recall_cli"
 )

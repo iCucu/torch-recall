@@ -36,7 +36,7 @@ rules: list[str]                         user_attrs: dict
 
 ## 1. TargetingBuilder：索引构建
 
-**文件**: `index_model/torch_recall/recall_method/targeting/builder.py`
+**文件**: `index/torch_recall/recall_method/targeting/builder.py`
 
 TargetingBuilder 将 `list[str]` 的定向规则转换为 `TargetingRecall` 模型 + 元数据 JSON。
 
@@ -77,7 +77,7 @@ rules: list[str]
 
 ## 2. TargetingRecall：推理模型
 
-**文件**: `index_model/torch_recall/recall_method/targeting/recall.py`
+**文件**: `index/torch_recall/recall_method/targeting/recall.py`
 
 ### 模型状态 (Buffers)
 
@@ -129,7 +129,7 @@ def forward(self, pred_satisfied: torch.Tensor) -> torch.Tensor:
 
 ## 3. encode_user：用户属性编码
 
-**文件**: `index_model/torch_recall/recall_method/targeting/encoder.py`
+**文件**: `index/torch_recall/recall_method/targeting/encoder.py`
 
 将用户属性 dict 转换为 `[P] bool` 的 `pred_satisfied` 张量：
 

@@ -12,7 +12,7 @@ Targeting Recall 性能测试
 
 运行:
     cd torch-recall
-    PYTHONPATH=index_model python index_model/benchmarks/bench_targeting.py
+    PYTHONPATH=index python index/benchmarks/bench_targeting.py
 """
 
 import gc

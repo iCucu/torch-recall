@@ -12,7 +12,7 @@ Pipeline 示例 — Targeting + KNN 并行召回取交集
 
 运行方式:
     cd torch-recall
-    PYTHONPATH=index_model python examples/04_pipeline_and.py
+    PYTHONPATH=index python examples/04_pipeline_and.py
 """
 
 import time
