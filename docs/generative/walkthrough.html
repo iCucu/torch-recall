@@ -141,6 +141,42 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .lc.shared:hover{border-color:var(--yellow)}
 .lc.shared .lc-items{color:var(--yellow)}
 
+/* ── Validity Propagation Interactive ── */
+.vp-tensors{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.vp-tensor{font-size:11px;font-family:var(--mono);padding:6px 12px;border-radius:6px;border:1px solid var(--border-light);background:var(--bg-1);color:var(--text-1);line-height:1.5}
+.vp-tensor b{color:var(--accent)}
+.vp-tensor .vt-desc{color:var(--text-2);font-size:10px}
+.vp-lbtn{font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;transition:all .2s;font-family:var(--font)}
+.vp-lbtn:hover{border-color:var(--text-2);color:var(--text-0)}
+.vp-lbtn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+.vp-lbtn.done{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+.vp-detail{padding:16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;margin:12px 0;min-height:100px}
+.vp-detail h4{font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text-0)}
+.vp-detail .formula{font-family:var(--mono);font-size:12px;color:var(--accent);padding:8px 12px;background:var(--bg-2);border-radius:4px;margin:8px 0;line-height:1.6;white-space:pre-wrap}
+.vp-state-cards{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.vp-sc{padding:10px;border:1px solid var(--border-light);border-radius:6px;background:var(--bg-1);min-width:140px;font-size:12px;transition:all .3s}
+.vp-sc .sc-hd{font-weight:600;color:var(--text-0);margin-bottom:4px;font-family:var(--mono)}
+.vp-sc .sc-body{color:var(--text-1);line-height:1.6}
+.vp-sc .sc-result{margin-top:4px;font-weight:700;font-size:13px}
+.vp-sc.valid{border-color:var(--green);background:var(--green-bg)}
+.vp-sc.valid .sc-result{color:var(--green)}
+.vp-sc.invalid{border-color:var(--red);background:var(--red-bg)}
+.vp-sc.invalid .sc-result{color:var(--red)}
+.vp-tree-wrap{overflow-x:auto;margin:16px 0;padding:8px 0}
+.vp-summary{font-size:13px;color:var(--text-1);padding:12px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;margin:12px 0}
+.vp-summary b{color:var(--green)}
+.vp-summary .pruned{color:var(--red)}
+.vp-code-toggle{font-size:12px;color:var(--accent);cursor:pointer;padding:4px 0;border:none;background:none;font-family:var(--font)}
+.vp-code-toggle:hover{text-decoration:underline}
+.vp-code-block{font-family:var(--mono);font-size:11px;background:var(--bg-2);border:1px solid var(--border-light);border-radius:6px;padding:12px 16px;margin:8px 0;color:var(--text-1);line-height:1.7;overflow-x:auto;white-space:pre;display:none}
+.vp-code-block.show{display:block}
+.vp-code-block .kw{color:#ff7b72}
+.vp-code-block .fn{color:#d2a8ff}
+.vp-code-block .cm{color:#6e7681}
+#vp-trie .node rect{transition:fill .4s,stroke .4s,stroke-width .4s}
+#vp-trie .node text{transition:fill .4s}
+#vp-trie .edge{transition:stroke .4s,opacity .4s,stroke-width .4s}
+
 /* ── Responsive ── */
 @media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:56px 1fr} .sidebar{display:none} main{padding:20px 16px 60px}}
 </style>
@@ -395,17 +431,55 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
   <p class="desc"><code>item_mask = [T, T, F, T, T, F, F]</code>，不匹配的 item 得分设为 <code>-inf</code>。</p>
 
   <h3 id="phase2">Phase 2: Validity Propagation</h3>
-  <p>从叶子层向上传播：只要子树下有至少一个 valid item，节点就 valid。</p>
-  <div class="tbl-wrap"><table>
-    <tr><th>层</th><th>传播结果</th></tr>
-    <tr><td>L4 叶子</td><td class="mono">St2063(a,b) <b style="color:var(--green)">T</b> | St2064(c) <b style="color:var(--red)">F</b> | St2065(d) <b style="color:var(--green)">T</b> | St2066(e) <b style="color:var(--green)">T</b> | St2067(f) <b style="color:var(--red)">F</b> | St2068(g) <b style="color:var(--red)">F</b></td></tr>
-    <tr><td>L3</td><td class="mono">St2058 <b style="color:var(--green)">T</b> | St2059 <b style="color:var(--red)">F</b> | St2060 <b style="color:var(--green)">T</b> | St2061 <b style="color:var(--red)">F</b> | St2062 <b style="color:var(--red)">F</b></td></tr>
-    <tr><td>L2</td><td class="mono">St2053 <b style="color:var(--green)">T</b> | St2054 <b style="color:var(--red)">F</b> | St2055 <b style="color:var(--green)">T</b> | St2056 <b style="color:var(--red)">F</b> | St2057 <b style="color:var(--red)">F</b></td></tr>
-    <tr><td>L1</td><td class="mono">St2049 <b style="color:var(--green)">T</b> | St2050 <b style="color:var(--green)">T</b> | St2051 <b style="color:var(--red)">F</b> | St2052 <b style="color:var(--red)">F</b></td></tr>
-    <tr><td>L0</td><td class="mono">St1(tok=0) <b style="color:var(--green)">T</b> | St2(tok=1) <b style="color:var(--red)">F</b></td></tr>
-  </table></div>
-  <p class="desc">token=1 的整棵子树 (item f, g) 和 item c 的分支被剪掉。仅剩 3 条有效路径。<br>
-    <span style="color:var(--accent)">→ 点击上方 Trie 的「剪枝后」按钮查看效果</span></p>
+  <p>目标：根据 <code>item_mask</code>（Phase 1 的 targeting 结果），<b>自底向上</b>标记 Trie 中每个节点是否 valid。
+    如果一个节点的子树下没有任何 valid item，该节点标记为 invalid，后续 Beam Search 会跳过它 —— 这就是<b>剪枝</b>。</p>
+
+  <p style="color:var(--text-0);font-weight:600;margin-top:16px;font-size:13px">用到的 Tensor</p>
+  <div class="vp-tensors">
+    <div class="vp-tensor"><b>node_valid</b> [B, S] bool<div class="vt-desc">输出：每个 state 是否 valid</div></div>
+    <div class="vp-tensor"><b>item_mask</b> [B, N] bool<div class="vt-desc">输入：Phase 1 targeting 结果</div></div>
+    <div class="vp-tensor"><b>leaf_item_ids</b> [nL, M] int64<div class="vt-desc">叶子 → item 映射</div></div>
+    <div class="vp-tensor"><b>leaf_item_valid</b> [nL, M] bool<div class="vt-desc">叶子 → item 有效位 (排除 padding)</div></div>
+    <div class="vp-tensor"><b>packed_csr</b> [E+V, 2] int64<div class="vt-desc">CSR 边表 (查子节点 state)</div></div>
+    <div class="vp-tensor"><b>csr_indptr</b> [S+2] int64<div class="vt-desc">CSR 行指针 (定位子节点区间)</div></div>
+  </div>
+
+  <div style="margin:12px 0">
+    <button class="vp-code-toggle" onclick="document.getElementById('vp-code').classList.toggle('show')">▸ 查看 Python 代码 (propagate_validity)</button>
+    <div id="vp-code" class="vp-code-block"><span class="cm"># node_valid = torch.zeros(B, num_states, dtype=torch.bool)</span>
+
+<span class="cm"># ── Step 1: 初始化叶子层 ──</span>
+items_g = item_mask[:, leaf_item_ids]           <span class="cm"># [B, nL, M]</span>
+leaf_v = (items_g &amp; leaf_item_valid).<span class="fn">any</span>(dim=2)  <span class="cm"># [B, nL]</span>
+node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
+
+<span class="cm"># ── Step 2: 逐层向上传播 ──</span>
+<span class="kw">for</span> d <span class="kw">in</span> <span class="fn">range</span>(path_length - 2, -1, -1):
+    starts = csr_indptr[states]                 <span class="cm"># CSR 起始位置</span>
+    actual_lens = csr_indptr[states + 1] - starts
+    gather_idx = (starts + offsets).<span class="fn">clamp</span>(max=max_csr)
+    ch_states = packed_csr[gather_idx, 1]       <span class="cm"># 子节点 state ID</span>
+    child_v = node_valid[:, ch_states] &amp; struct_ok
+    node_valid[:, s:s+cnt] = child_v.<span class="fn">any</span>(dim=2) <span class="cm"># 有一个子 valid 即可</span></div>
+  </div>
+
+  <p style="color:var(--text-0);font-weight:600;margin-top:20px;font-size:13px">逐层传播 — 点击查看每层的计算过程</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center" id="vp-btns"></div>
+  <div class="vp-detail" id="vp-detail">
+    <p style="color:var(--text-2)">← 点击上方按钮，从叶子层 (L4) 开始逐步向上传播</p>
+  </div>
+
+  <p style="color:var(--text-0);font-weight:600;font-size:13px;margin-top:16px">传播过程可视化</p>
+  <div class="vp-tree-wrap">
+    <svg id="vp-trie" width="760" height="350" viewBox="0 0 760 350"></svg>
+  </div>
+
+  <div class="vp-summary" id="vp-summary">
+    逐层传播完成后：<b>10 个 state 为 valid</b>，<span class="pruned">12 个 state 被剪掉</span>。<br>
+    有效路径仅剩 3 条：<code>[0,1,2,3,4]→a,b</code>、<code>[0,2,8,9,10]→d</code>、<code>[0,2,8,9,11]→e</code>。<br>
+    整个 token=1 的子树 (item f, g) 和 item c 的分支全部被剪掉。<br>
+    <span style="color:var(--accent)">→ 点击上方 Trie 的「剪枝后」按钮查看最终效果</span>
+  </div>
 
   <h3 id="phase3">Phase 3: Beam Search (beam_width=3)</h3>
   <p class="desc">每步对 beam × children 所有候选做全局 topk。Step 0~1 用 Dense 表 O(1) 查询；Step 2~4 用 CSR。</p>
@@ -860,6 +934,309 @@ leafData.forEach((lf, i) => {
     `<div class="lc-ids">valid=[${lf.items.map(()=>'T').join(',')}${lf.ids.length < 2 ? ', F' : ''}]</div>`;
   lcContainer.appendChild(card);
 });
+
+/* ═══════════ Validity Propagation Interactive ═══════════ */
+const vpLayers = [
+  {
+    id:'L4', label:'Step 1: L4 叶子层',
+    title:'L4 叶子层 (States 2063~2068)',
+    formula:'items_g = item_mask[:, leaf_item_ids]        # [B, nL, M]\nleaf_v = (items_g & leaf_item_valid).any(dim=2)  # [B, nL]\nnode_valid[:, leaf_s:leaf_s+leaf_c] = leaf_v',
+    desc:'对每个叶子，用 <code>leaf_item_ids</code> 取出关联的 item index，在 <code>item_mask</code> 中查询。只要叶子关联的 item 中有一个是 valid 的（且非 padding），叶子就 valid。',
+    hint:'💡 叶子层用 <code>leaf_item_ids</code> 取出每个叶子关联的 item index，再在 <code>item_mask</code> 中查询。<code>leaf_item_valid</code> 用来排除 padding 位。',
+    states:[
+      {st:2063,items:'a(✓), b(✓)',mask:'T, T',result:true,reason:'item a 和 b 都在 item_mask 中 → any=True'},
+      {st:2064,items:'c(✗)',mask:'F',result:false,reason:'item c 被 targeting 过滤 → any=False'},
+      {st:2065,items:'d(✓)',mask:'T',result:true,reason:'item d 在 item_mask 中'},
+      {st:2066,items:'e(✓)',mask:'T',result:true,reason:'item e 在 item_mask 中'},
+      {st:2067,items:'f(✗)',mask:'F',result:false,reason:'item f 被 targeting 过滤'},
+      {st:2068,items:'g(✗)',mask:'F',result:false,reason:'item g 被 targeting 过滤'},
+    ]
+  },
+  {
+    id:'L3', label:'Step 2: L3 层',
+    title:'L3 层 (States 2058~2062) — 通过 CSR 查子节点',
+    formula:'starts = csr_indptr[states]       # CSR 起始\nch = packed_csr[starts:ends, 1]  # 子节点 state IDs\nnode_valid[s] = node_valid[:, ch].any(dim=2)',
+    desc:'对每个 state，通过 <code>csr_indptr</code> 找到子节点区间，在 <code>packed_csr</code> 中读取子节点 state ID，检查 <code>node_valid</code> 是否至少有一个 True。',
+    hint:'💡 每个 state 通过 <code>csr_indptr[s]</code> 和 <code>csr_indptr[s+1]</code> 定位子节点在 <code>packed_csr</code> 中的区间，再用 <code>any()</code> 聚合。',
+    states:[
+      {st:2058,ch:[2063],chV:['T'],result:true,reason:'子 St2063=T → True (通往 a,b)'},
+      {st:2059,ch:[2064],chV:['F'],result:false,reason:'子 St2064=F → False (通往 c，被过滤)'},
+      {st:2060,ch:[2065,2066],chV:['T','T'],result:true,reason:'子 St2065=T, St2066=T → True (通往 d,e)'},
+      {st:2061,ch:[2067],chV:['F'],result:false,reason:'子 St2067=F → False (通往 f，被过滤)'},
+      {st:2062,ch:[2068],chV:['F'],result:false,reason:'子 St2068=F → False (通往 g，被过滤)'},
+    ]
+  },
+  {
+    id:'L2', label:'Step 3: L2 层',
+    title:'L2 层 (States 2053~2057) — CSR 查子节点',
+    formula:'starts = csr_indptr[states]\nch = packed_csr[starts:ends, 1]\nnode_valid[s] = node_valid[:, ch].any(dim=2)',
+    desc:'同样的 CSR 查询逻辑。注意 St2054 的唯一子节点 St2059 已经是 False，所以 <b>item c 的整条路径到这里就断了</b>。',
+    hint:'💡 item c 的分支 (St2054→St2059→St2064) 在 L2 层被彻底剪断，Beam Search 不会探索到。',
+    states:[
+      {st:2053,ch:[2058],chV:['T'],result:true,reason:'子 St2058=T → True'},
+      {st:2054,ch:[2059],chV:['F'],result:false,reason:'子 St2059=F → False ← item c 分支剪断!'},
+      {st:2055,ch:[2060],chV:['T'],result:true,reason:'子 St2060=T → True'},
+      {st:2056,ch:[2061],chV:['F'],result:false,reason:'子 St2061=F → False ← item f 分支剪断!'},
+      {st:2057,ch:[2062],chV:['F'],result:false,reason:'子 St2062=F → False ← item g 分支剪断!'},
+    ]
+  },
+  {
+    id:'L1', label:'Step 4: L1 层',
+    title:'L1 层 (States 2049~2052) — CSR 查子节点',
+    formula:'starts = csr_indptr[states]\nch = packed_csr[starts:ends, 1]\nnode_valid[s] = node_valid[:, ch].any(dim=2)',
+    desc:'St2049 有两个子节点：St2053=T, St2054=F，<code>any()</code> → True（至少一个 valid）。<br>St2051 和 St2052 的子节点全是 False，<b>整棵子树被剪掉</b>。',
+    hint:'💡 St2049 虽然有一个 invalid 子节点 (St2054)，但另一个 (St2053) 是 valid 的，any() 就为 True。Beam Search 仍然可以走这条路径。',
+    states:[
+      {st:2049,ch:[2053,2054],chV:['T','F'],result:true,reason:'St2053=T, St2054=F → any=True'},
+      {st:2050,ch:[2055],chV:['T'],result:true,reason:'子 St2055=T → True'},
+      {st:2051,ch:[2056],chV:['F'],result:false,reason:'子 St2056=F → False ← token=3 整棵子树剪掉!'},
+      {st:2052,ch:[2057],chV:['F'],result:false,reason:'子 St2057=F → False ← token=4 整棵子树剪掉!'},
+    ]
+  },
+  {
+    id:'L0', label:'Step 5: L0 根层',
+    title:'L0 根层 (States 1~2048，只有 1 和 2 有子节点)',
+    formula:'starts = csr_indptr[states]\nch = packed_csr[starts:ends, 1]\nnode_valid[s] = node_valid[:, ch].any(dim=2)',
+    desc:'L0 有 V=2048 个槽位，其中只有 State 1 (tok=0) 和 State 2 (tok=1) 有实际子节点。<br>State 2 的子节点 St2051=F, St2052=F，所以 <b>token=1 整个被剪掉</b>！',
+    hint:'💡 State 2 对应首 token=1。它的所有子树都 invalid，所以 Beam Search 第 0 步就不会选择 token=1。',
+    states:[
+      {st:1,ch:[2049,2050],chV:['T','T'],result:true,reason:'St2049=T, St2050=T → True'},
+      {st:2,ch:[2051,2052],chV:['F','F'],result:false,reason:'St2051=F, St2052=F → False ← token=1 整个被剪掉!'},
+    ]
+  }
+];
+
+const vpValidResult = {};
+vpLayers.forEach(layer => layer.states.forEach(s => { vpValidResult[s.st] = s.result; }));
+
+let vpCurrentStep = -1;
+const vpBtnsEl = document.getElementById('vp-btns');
+
+vpLayers.forEach((layer, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'vp-lbtn';
+  btn.textContent = layer.label;
+  btn.dataset.idx = i;
+  btn.onclick = () => selectVPLayer(i);
+  vpBtnsEl.appendChild(btn);
+});
+const vpAutoBtn = document.createElement('button');
+vpAutoBtn.className = 'vp-lbtn';
+vpAutoBtn.textContent = '▶ 自动播放';
+vpAutoBtn.style.cssText = 'margin-left:auto;color:var(--yellow);border-color:var(--yellow)';
+vpAutoBtn.onclick = autoPlayVP;
+vpBtnsEl.appendChild(vpAutoBtn);
+
+/* ── VP Mini Trie SVG ── */
+const vpSvg = document.getElementById('vp-trie');
+const vpNW = 80, vpNH = 36;
+const vpNodes = [
+  {id:1,   x:240,y:10, label:'St 1',   layer:0,sub:'tok=0'},
+  {id:2,   x:530,y:10, label:'St 2',   layer:0,sub:'tok=1'},
+  {id:2049,x:120,y:80, label:'St 2049',layer:1,sub:'tok=1'},
+  {id:2050,x:340,y:80, label:'St 2050',layer:1,sub:'tok=2'},
+  {id:2051,x:480,y:80, label:'St 2051',layer:1,sub:'tok=3'},
+  {id:2052,x:620,y:80, label:'St 2052',layer:1,sub:'tok=4'},
+  {id:2053,x:60, y:150,label:'St 2053',layer:2,sub:'t=2'},
+  {id:2054,x:180,y:150,label:'St 2054',layer:2,sub:'t=5'},
+  {id:2055,x:340,y:150,label:'St 2055',layer:2,sub:'t=8'},
+  {id:2056,x:480,y:150,label:'St 2056',layer:2,sub:'t=12'},
+  {id:2057,x:620,y:150,label:'St 2057',layer:2,sub:'t=17'},
+  {id:2058,x:60, y:220,label:'St 2058',layer:3,sub:'t=3'},
+  {id:2059,x:180,y:220,label:'St 2059',layer:3,sub:'t=6'},
+  {id:2060,x:340,y:220,label:'St 2060',layer:3,sub:'t=9'},
+  {id:2061,x:480,y:220,label:'St 2061',layer:3,sub:'t=13'},
+  {id:2062,x:620,y:220,label:'St 2062',layer:3,sub:'t=18'},
+  {id:2063,x:20, y:300,label:'St 2063',layer:4,sub:'[a,b]'},
+  {id:2064,x:140,y:300,label:'St 2064',layer:4,sub:'[c]'},
+  {id:2065,x:280,y:300,label:'St 2065',layer:4,sub:'[d]'},
+  {id:2066,x:400,y:300,label:'St 2066',layer:4,sub:'[e]'},
+  {id:2067,x:520,y:300,label:'St 2067',layer:4,sub:'[f]'},
+  {id:2068,x:640,y:300,label:'St 2068',layer:4,sub:'[g]'},
+];
+const vpEdgeList = [
+  [1,2049],[1,2050],[2,2051],[2,2052],
+  [2049,2053],[2049,2054],[2050,2055],
+  [2051,2056],[2052,2057],
+  [2053,2058],[2054,2059],[2055,2060],
+  [2056,2061],[2057,2062],
+  [2058,2063],[2059,2064],[2060,2065],[2060,2066],
+  [2061,2067],[2062,2068],
+];
+const vpNodeMap2 = Object.fromEntries(vpNodes.map(n => [n.id, n]));
+const vpNodeEls = {}, vpEdgeEls2 = {};
+
+['L0','L1','L2','L3','L4 (叶)'].forEach((l, i) => {
+  const t = document.createElementNS(NS,'text');
+  t.setAttribute('x','2'); t.setAttribute('y', [10,80,150,220,300][i] + vpNH/2 + 4);
+  t.setAttribute('fill','#6e7681'); t.setAttribute('font-size','10');
+  t.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
+  t.setAttribute('font-weight','500');
+  t.textContent = l; vpSvg.appendChild(t);
+});
+
+const vpEg = document.createElementNS(NS,'g');
+vpEdgeList.forEach(([from, to]) => {
+  const f = vpNodeMap2[from], t2 = vpNodeMap2[to];
+  const sx = f.x+vpNW/2, sy = f.y+vpNH, tx = t2.x+vpNW/2, ty = t2.y;
+  const my = (sy+ty)/2;
+  const p = document.createElementNS(NS,'path');
+  p.setAttribute('d',`M ${sx} ${sy} C ${sx} ${my}, ${tx} ${my}, ${tx} ${ty}`);
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke','#30363d');
+  p.setAttribute('stroke-width','1.5');
+  p.classList.add('edge');
+  vpEdgeEls2[`${from}-${to}`] = p;
+  vpEg.appendChild(p);
+});
+vpSvg.appendChild(vpEg);
+
+const vpNg = document.createElementNS(NS,'g');
+vpNodes.forEach(n => {
+  const g = document.createElementNS(NS,'g');
+  g.classList.add('node');
+  const r = document.createElementNS(NS,'rect');
+  r.setAttribute('x',n.x); r.setAttribute('y',n.y);
+  r.setAttribute('width',vpNW); r.setAttribute('height',vpNH);
+  r.setAttribute('rx','5');
+  r.setAttribute('fill','#1a1f2b'); r.setAttribute('stroke','#30363d');
+  r.setAttribute('stroke-width','1');
+  g.appendChild(r);
+
+  const t1 = document.createElementNS(NS,'text');
+  t1.setAttribute('x',n.x+vpNW/2); t1.setAttribute('y',n.y+14);
+  t1.setAttribute('text-anchor','middle');
+  t1.setAttribute('fill','#e6edf3'); t1.setAttribute('font-size','10');
+  t1.setAttribute('font-weight','600');
+  t1.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
+  t1.textContent = n.label;
+  g.appendChild(t1);
+
+  const t2 = document.createElementNS(NS,'text');
+  t2.setAttribute('x',n.x+vpNW/2); t2.setAttribute('y',n.y+28);
+  t2.setAttribute('text-anchor','middle');
+  t2.setAttribute('fill','#8b949e'); t2.setAttribute('font-size','9');
+  t2.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
+  t2.textContent = n.sub||'';
+  g.appendChild(t2);
+
+  const ci = document.createElementNS(NS,'circle');
+  ci.setAttribute('cx',n.x+vpNW-6); ci.setAttribute('cy',n.y+7);
+  ci.setAttribute('r','4.5');
+  ci.setAttribute('fill','#30363d');
+  ci.setAttribute('stroke','#21262d');
+  ci.setAttribute('stroke-width','1');
+  g.appendChild(ci);
+
+  vpNodeEls[n.id] = {g,rect:r,t1,t2,indicator:ci};
+  vpNg.appendChild(g);
+});
+vpSvg.appendChild(vpNg);
+
+function selectVPLayer(idx) {
+  vpCurrentStep = idx;
+  vpBtnsEl.querySelectorAll('.vp-lbtn').forEach((b,i) => {
+    if (i >= vpLayers.length) return;
+    b.classList.remove('active');
+    b.classList.toggle('done', i < idx);
+    if (i === idx) b.classList.add('active');
+  });
+
+  const computed = new Set();
+  for (let i = 0; i <= idx; i++) vpLayers[i].states.forEach(s => computed.add(s.st));
+
+  const layer = vpLayers[idx];
+  const det = document.getElementById('vp-detail');
+  let h = `<h4>${layer.title}</h4>`;
+  h += `<p style="color:var(--text-1);font-size:13px;margin-bottom:8px">${layer.desc}</p>`;
+  h += `<div class="formula">${layer.formula}</div>`;
+  h += '<div class="vp-state-cards">';
+  layer.states.forEach(s => {
+    const cls = s.result ? 'valid' : 'invalid';
+    h += `<div class="vp-sc ${cls}"><div class="sc-hd">St ${s.st}</div><div class="sc-body">`;
+    if (s.items) {
+      h += `关联 item: ${s.items}<br>item_mask: [${s.mask}]`;
+    } else if (s.ch) {
+      h += `CSR 子节点: ` + s.ch.map((c,i) => `St${c}(<span style="color:${s.chV[i]==='T'?'var(--green)':'var(--red)'}">=${s.chV[i]}</span>)`).join(', ');
+    }
+    h += `</div><div class="sc-result">${s.result?'✓ Valid':'✗ Invalid'} — ${s.reason}</div></div>`;
+  });
+  h += '</div>';
+  h += `<p style="font-size:12px;color:var(--text-2);margin-top:8px">${layer.hint}</p>`;
+  det.innerHTML = h;
+
+  updateVPTrie(computed, idx);
+}
+
+function updateVPTrie(computed, activeLayerIdx) {
+  const activeLayer = vpLayers[activeLayerIdx];
+  const activeStates = new Set(activeLayer.states.map(s => s.st));
+
+  vpNodes.forEach(n => {
+    const el = vpNodeEls[n.id];
+    const isComputed = computed.has(n.id);
+    const valid = vpValidResult[n.id];
+    const isActive = activeStates.has(n.id);
+
+    if (isComputed) {
+      if (valid) {
+        el.rect.setAttribute('fill', isActive ? 'rgba(63,185,80,.15)' : 'rgba(63,185,80,.08)');
+        el.rect.setAttribute('stroke', '#3fb950');
+        el.rect.setAttribute('stroke-width', isActive ? '2' : '1.5');
+        el.indicator.setAttribute('fill', '#3fb950');
+        el.t1.setAttribute('fill', '#e6edf3');
+        el.t2.setAttribute('fill', '#3fb950');
+      } else {
+        el.rect.setAttribute('fill', 'rgba(248,81,73,.06)');
+        el.rect.setAttribute('stroke', '#f85149');
+        el.rect.setAttribute('stroke-width', isActive ? '2' : '1');
+        el.indicator.setAttribute('fill', '#f85149');
+        el.t1.setAttribute('fill', '#6e7681');
+        el.t2.setAttribute('fill', '#6e7681');
+      }
+    } else {
+      el.rect.setAttribute('fill', '#1a1f2b');
+      el.rect.setAttribute('stroke', '#30363d');
+      el.rect.setAttribute('stroke-width', '1');
+      el.indicator.setAttribute('fill', '#30363d');
+      el.t1.setAttribute('fill', '#e6edf3');
+      el.t2.setAttribute('fill', '#8b949e');
+    }
+  });
+
+  vpEdgeList.forEach(([from, to]) => {
+    const p = vpEdgeEls2[`${from}-${to}`];
+    const fc = computed.has(from), tc = computed.has(to);
+    if (fc && tc) {
+      const fv = vpValidResult[from], tv = vpValidResult[to];
+      if (fv && tv) {
+        p.setAttribute('stroke', '#3fb950'); p.style.opacity = '.7';
+        p.setAttribute('stroke-width', '2'); p.setAttribute('stroke-dasharray', '');
+      } else {
+        p.setAttribute('stroke', '#f85149'); p.style.opacity = '.2';
+        p.setAttribute('stroke-width', '1'); p.setAttribute('stroke-dasharray', '4 3');
+      }
+    } else if (tc) {
+      const tv = vpValidResult[to];
+      p.setAttribute('stroke', tv ? '#3fb950' : '#f85149'); p.style.opacity = '.35';
+      p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-dasharray', '');
+    } else {
+      p.setAttribute('stroke', '#30363d'); p.style.opacity = '.6';
+      p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-dasharray', '');
+    }
+  });
+}
+
+async function autoPlayVP() {
+  vpAutoBtn.disabled = true;
+  vpAutoBtn.textContent = '▶ 播放中…';
+  for (let i = 0; i < vpLayers.length; i++) {
+    selectVPLayer(i);
+    await new Promise(r => setTimeout(r, 1400));
+  }
+  vpAutoBtn.disabled = false;
+  vpAutoBtn.textContent = '▶ 自动播放';
+}
 
 /* ── TOC active tracking ── */
 const sections = document.querySelectorAll('section[id]');
