@@ -177,6 +177,32 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 #vp-trie .node text{transition:fill .4s}
 #vp-trie .edge{transition:stroke .4s,opacity .4s,stroke-width .4s}
 
+/* ── Tensor Cards ── */
+.tf-bar{display:flex;align-items:center;gap:6px;margin:16px 0;flex-wrap:wrap}
+.tf-phase{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid var(--border-light);background:var(--bg-1);color:var(--text-1);cursor:pointer;transition:all .2s;text-align:center}
+.tf-phase:hover{border-color:var(--text-2);color:var(--text-0)}
+.tf-phase.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.tf-arrow{color:var(--text-2);font-size:16px;user-select:none}
+.tc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+@media(max-width:700px){.tc-grid{grid-template-columns:1fr}}
+.tc{padding:14px 16px;border:1px solid var(--border-light);border-radius:8px;background:var(--bg-card);transition:all .3s}
+.tc:hover{border-color:var(--accent);transform:translateY(-1px)}
+.tc.dim{opacity:.25;transform:scale(.98)}
+.tc .tc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.tc .tc-name{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent)}
+.tc .tc-shape{font-family:var(--mono);font-size:11px;color:var(--text-2)}
+.tc .tc-desc{font-size:12px;color:var(--text-1);margin-bottom:8px}
+.tc .tc-badges{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.pp{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600}
+.pp.p2{background:rgba(248,81,73,.12);color:#f85149}
+.pp.p3{background:rgba(88,166,255,.1);color:#58a6ff}
+.pp.p4{background:rgba(63,185,80,.12);color:#3fb950}
+.tc .tc-usage{font-size:11px;background:var(--bg-2);border-radius:4px;padding:8px 10px;line-height:1.7}
+.tc .tc-usage code{font-size:11px;color:var(--accent)}
+.tc .tc-usage .uline{color:var(--text-1);margin:2px 0}
+.tc .tc-usage .uhigh{color:var(--green);font-weight:500}
+.tc .tc-usage .utip{color:var(--text-2);font-size:10px;margin-top:4px}
+
 /* ── Responsive ── */
 @media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:56px 1fr} .sidebar{display:none} main{padding:20px 16px 60px}}
 </style>
@@ -513,16 +539,110 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
 <section id="tensors">
   <h2>Tensor 速查</h2>
   <h3>离线构建的 Tensor (Trie registered buffer)</h3>
-  <div class="tbl-wrap"><table>
-    <tr><th>Tensor</th><th>形状</th><th>含义</th><th>用在哪</th></tr>
-    <tr><td class="mono">start_mask</td><td class="mono">[V] bool</td><td>哪些首 token 在 Trie 中存在</td><td>Beam Search Step 0</td></tr>
-    <tr><td class="mono">dense_mask</td><td class="mono">[V, V] bool</td><td>前 d_dense 层密集查表</td><td>Dense 步: O(1) 判断</td></tr>
-    <tr><td class="mono">dense_states</td><td class="mono">[V, V] int64</td><td>前 d_dense 层 state 查表</td><td>Dense 步: 获取 state ID</td></tr>
-    <tr><td class="mono">packed_csr</td><td class="mono">[E+V, 2] int64</td><td>CSR 全量边表 [token, child]</td><td>CSR 步 + Validity</td></tr>
-    <tr><td class="mono">csr_indptr</td><td class="mono">[S+2] int64</td><td>CSR 行指针</td><td>定位子节点区间</td></tr>
-    <tr><td class="mono">leaf_item_ids</td><td class="mono">[nL, M] int64</td><td>叶子 → item 映射</td><td>Phase 4 Resolve</td></tr>
-    <tr><td class="mono">leaf_item_valid</td><td class="mono">[nL, M] bool</td><td>叶子 → item 有效性</td><td>Phase 4 Resolve</td></tr>
-  </table></div>
+  <p class="desc">点击下方 Phase 按钮，高亮该阶段使用的 tensor；再次点击取消过滤。</p>
+  <div class="tf-bar" id="tf-bar">
+    <button class="tf-phase" data-phase="p2">Phase 2 Validity</button>
+    <span class="tf-arrow">→</span>
+    <button class="tf-phase" data-phase="p3">Phase 3 Beam Search</button>
+    <span class="tf-arrow">→</span>
+    <button class="tf-phase" data-phase="p4">Phase 4 Resolve</button>
+  </div>
+  <div class="tc-grid" id="tc-grid">
+
+    <div class="tc" data-phases="p3">
+      <div class="tc-hd"><span class="tc-name">start_mask</span><span class="tc-shape">[V] bool</span></div>
+      <div class="tc-desc">哪些首 token 在 Trie 中存在。<code>start_mask[t]=True</code> 表示至少有一个 item 以 token t 开头。</div>
+      <div class="tc-badges"><span class="pp p3">Phase 3 · Step 0</span></div>
+      <div class="tc-usage">
+        <div class="uline"><code>l0_valid = node_valid[:, 1:V+1]</code></div>
+        <div class="uline"><code>lp0.masked_fill(~(<b>start_mask</b> &amp; l0_valid), -inf)</code></div>
+        <div class="uhigh">→ 与 node_valid 取交集，不在 Trie 中或被剪枝的首 token 设为 -inf，topk 永远不选。</div>
+        <div class="utip">本例: 只有 idx 0 和 1 为 True → token=1 被 node_valid 剪掉后只剩 token=0。</div>
+      </div>
+    </div>
+
+    <div class="tc" data-phases="p3">
+      <div class="tc-hd"><span class="tc-name">dense_mask</span><span class="tc-shape">[V, V] bool</span></div>
+      <div class="tc-desc">前 d_dense 层密集查表。<code>dense_mask[t0, t1]=True</code> 表示前缀 (t0, t1) 在 Trie 中存在。</div>
+      <div class="tc-badges"><span class="pp p3">Phase 3 · Dense 步</span></div>
+      <div class="tc-usage">
+        <div class="uline"><code>parent_tok = (flat_st - 1).long()</code></div>
+        <div class="uline"><code>masks = <b>dense_mask</b>[parent_tok]</code> → [B*beam, V]</div>
+        <div class="uline"><code>combined = masks &amp; node_valid[bb, st_table]</code></div>
+        <div class="uhigh">→ 用 parent token 做数组下标 O(1) 取出所有合法子 token，再与 node_valid 做交集。</div>
+        <div class="utip">本例 Step 1: dense_mask[0] 中 [1]=T, [2]=T → beam 可走 token 1 和 2。</div>
+      </div>
+    </div>
+
+    <div class="tc" data-phases="p3">
+      <div class="tc-hd"><span class="tc-name">dense_states</span><span class="tc-shape">[V, V] int64</span></div>
+      <div class="tc-desc">前 d_dense 层 state 查表。<code>dense_states[t0, t1]</code> 返回前缀 (t0, t1) 对应的 state ID。</div>
+      <div class="tc-badges"><span class="pp p3">Phase 3 · Dense 步</span></div>
+      <div class="tc-usage">
+        <div class="uline"><code>st_table = <b>dense_states</b>[parent_tok]</code> → [B*beam, V]</div>
+        <div class="uline"><code>new_states = st_table.gather(1, top_tk)</code></div>
+        <div class="uhigh">→ 与 dense_mask 配合，获取子节点 state ID，无需 CSR 查表即可 O(1) 定位。</div>
+        <div class="utip">本例: dense_states[0,1]=2049, dense_states[0,2]=2050。</div>
+      </div>
+    </div>
+
+    <div class="tc" data-phases="p2 p3">
+      <div class="tc-hd"><span class="tc-name">packed_csr</span><span class="tc-shape">[E+V, 2] int64</span></div>
+      <div class="tc-desc">CSR 格式全量边表，每行 <code>[token, child_state]</code>，末尾 V 行是 OOB 安全填充。</div>
+      <div class="tc-badges"><span class="pp p2">Phase 2 传播</span><span class="pp p3">Phase 3 · CSR 步</span></div>
+      <div class="tc-usage">
+        <div class="uline" style="color:var(--red)"><b>Phase 2</b>: <code>ch_states = <b>packed_csr</b>[gather_idx, 1]</code></div>
+        <div class="uline">→ 查出每层节点的子节点 state ID，做 node_valid 向上传播。</div>
+        <div class="uline" style="color:var(--accent);margin-top:4px"><b>Phase 3</b>: <code>gathered = <b>packed_csr</b>[gi]</code> → [B*beam, limit, 2]</div>
+        <div class="uline"><code>c_tok = gathered[..., 0]; c_st = gathered[..., 1]</code></div>
+        <div class="uhigh">→ 深层 CSR 步：burst-read 取出每个 beam 的所有子节点 (token, state)，再做 topk。</div>
+        <div class="utip">本例: 20 真实边 + 2048 OOB 填充 = 2068 行。</div>
+      </div>
+    </div>
+
+    <div class="tc" data-phases="p2 p3">
+      <div class="tc-hd"><span class="tc-name">csr_indptr</span><span class="tc-shape">[S+2] int64</span></div>
+      <div class="tc-desc">CSR 行指针。state s 的子节点 = <code>packed_csr[indptr[s] : indptr[s+1]]</code>。</div>
+      <div class="tc-badges"><span class="pp p2">Phase 2 传播</span><span class="pp p3">Phase 3 · CSR 步</span></div>
+      <div class="tc-usage">
+        <div class="uline" style="color:var(--red)"><b>Phase 2</b>: <code>starts = <b>csr_indptr</b>[states]</code></div>
+        <div class="uline"><code>actual_lens = <b>csr_indptr</b>[states+1] - starts</code></div>
+        <div class="uline">→ 定位每层每个节点的子节点区间，做逐层向上传播。</div>
+        <div class="uline" style="color:var(--accent);margin-top:4px"><b>Phase 3</b>: <code>starts = <b>csr_indptr</b>[flat_st]</code></div>
+        <div class="uline"><code>a_lens = <b>csr_indptr</b>[flat_st + 1] - starts</code></div>
+        <div class="uhigh">→ 定位每个 beam 当前 state 的子节点在 packed_csr 中的起止位置。</div>
+        <div class="utip">本例: indptr[2050]=6, indptr[2051]=7 → St 2050 有 1 个子节点在 packed_csr[6]。</div>
+      </div>
+    </div>
+
+    <div class="tc" data-phases="p2 p4">
+      <div class="tc-hd"><span class="tc-name">leaf_item_ids</span><span class="tc-shape">[nL, M] int64</span></div>
+      <div class="tc-desc">叶子 → item 映射。<code>leaf_item_ids[leaf_idx]</code> 返回该叶子关联的 item index 列表 (padded)。</div>
+      <div class="tc-badges"><span class="pp p2">Phase 2 叶子初始化</span><span class="pp p4">Phase 4 Resolve</span></div>
+      <div class="tc-usage">
+        <div class="uline" style="color:var(--red)"><b>Phase 2</b>: <code>items_g = item_mask[:, <b>leaf_item_ids</b>]</code> → [B, nL, M]</div>
+        <div class="uline">→ 取出每个叶子关联的 item 的 targeting 结果，初始化叶子层 validity。</div>
+        <div class="uline" style="color:var(--green);margin-top:4px"><b>Phase 4</b>: <code>items = <b>leaf_item_ids</b>[local]</code> → [B, beam, M]</div>
+        <div class="uline"><code>output.scatter_reduce_(1, flat_items, flat_scores, "amax")</code></div>
+        <div class="uhigh">→ 叶子 state → item index，再把 beam 分数 scatter 到 item 维度，同一 item 取 max。</div>
+        <div class="utip">本例: leaf 0 = [0, 1] 即 item a 和 b 共享叶子 St2063。</div>
+      </div>
+    </div>
+
+    <div class="tc" data-phases="p2 p4">
+      <div class="tc-hd"><span class="tc-name">leaf_item_valid</span><span class="tc-shape">[nL, M] bool</span></div>
+      <div class="tc-desc">叶子 → item 有效位。<code>leaf_item_valid[i, j]=True</code> 表示第 j 个 item 是真实的（非 padding）。</div>
+      <div class="tc-badges"><span class="pp p2">Phase 2 叶子初始化</span><span class="pp p4">Phase 4 Resolve</span></div>
+      <div class="tc-usage">
+        <div class="uline" style="color:var(--red)"><b>Phase 2</b>: <code>leaf_v = (items_g &amp; <b>leaf_item_valid</b>).any(dim=2)</code></div>
+        <div class="uline">→ 排除 padding 位，只看真实 item 是否有 valid 的，决定叶子的 validity。</div>
+        <div class="uline" style="color:var(--green);margin-top:4px"><b>Phase 4</b>: <code>scores_exp.masked_fill(~<b>leaf_item_valid</b>[local], -inf)</code></div>
+        <div class="uhigh">→ padding 位分数设 -inf，scatter_reduce 时不会影响真实 item 的分数。</div>
+        <div class="utip">本例: leaf 0 = [T, T] (a,b 都真实), 其余 = [T, F] (1 真实 + 1 padding)。</div>
+      </div>
+    </div>
+
+  </div>
 
   <h3>推理时动态生成的 Tensor</h3>
   <div class="tbl-wrap"><table>
@@ -1237,6 +1357,27 @@ async function autoPlayVP() {
   vpAutoBtn.disabled = false;
   vpAutoBtn.textContent = '▶ 自动播放';
 }
+
+/* ═══════════ Tensor Phase Filter ═══════════ */
+let activePhase = null;
+document.querySelectorAll('#tf-bar .tf-phase').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const ph = btn.dataset.phase;
+    if (activePhase === ph) {
+      activePhase = null;
+      btn.classList.remove('on');
+    } else {
+      activePhase = ph;
+      document.querySelectorAll('#tf-bar .tf-phase').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+    }
+    document.querySelectorAll('#tc-grid .tc').forEach(card => {
+      if (!activePhase) { card.classList.remove('dim'); return; }
+      const phases = card.dataset.phases.split(' ');
+      card.classList.toggle('dim', !phases.includes(activePhase));
+    });
+  });
+});
 
 /* ── TOC active tracking ── */
 const sections = document.querySelectorAll('section[id]');
