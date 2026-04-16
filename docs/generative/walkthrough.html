@@ -4,24 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>生成式召回 — 端到端示例</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg-0: #faf7f4; --bg-1: #ffffff; --bg-2: #f3ede7;
-  --bg-card: #ffffff; --border: #e0d6cc; --border-light: #ebe3db;
-  --text-0: #2d2420; --text-1: #6b5d55; --text-2: #a69890;
-  --accent: #c08040; --accent-bg: rgba(192,128,64,.07);
-  --green: #5c8a50; --green-bg: rgba(92,138,80,.07);
-  --red: #c25a4a; --red-bg: rgba(194,90,74,.06);
-  --yellow: #b89030; --yellow-bg: rgba(184,144,48,.07);
-  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
-  --mono: 'SF Mono','Fira Code','JetBrains Mono','Menlo',monospace;
+  --bg-0: #f8f6f3; --bg-1: #ffffff; --bg-2: #f2eeea;
+  --bg-card: #ffffff; --border: #e5ddd5; --border-light: #eee8e2;
+  --text-0: #3a3530; --text-1: #7a7168; --text-2: #b0a89f;
+  --accent: #a67c52; --accent-bg: rgba(166,124,82,.06);
+  --green: #6b8f6b; --green-bg: rgba(107,143,107,.06);
+  --red: #b06a60; --red-bg: rgba(176,106,96,.05);
+  --yellow: #a08858; --yellow-bg: rgba(160,136,88,.06);
+  --purple: #8a7fa0; --purple-bg: rgba(138,127,160,.06);
+  --font: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC',sans-serif;
+  --mono: 'JetBrains Mono','SF Mono','Fira Code','Menlo',monospace;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;scroll-padding-top:64px}
 body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-height:1.75;font-size:16px;display:grid;grid-template-columns:210px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
 
 /* ── Nav ── */
-.top-nav{grid-column:1/-1;position:sticky;top:0;z-index:100;display:flex;align-items:center;padding:0 24px;gap:16px;background:rgba(250,247,244,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-light)}
+.top-nav{grid-column:1/-1;position:sticky;top:0;z-index:100;display:flex;align-items:center;padding:0 24px;gap:16px;background:rgba(248,246,243,.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-light)}
 .top-nav h1{font-size:17px;font-weight:600;white-space:nowrap}
 .top-nav .params{display:flex;gap:12px;margin-left:auto}
 .top-nav .param{font-size:13px;color:var(--text-1);font-family:var(--mono)}
@@ -45,7 +48,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-2);padding:1px 
 /* ── Stats ── */
 .stats{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
 .stat{flex:1;min-width:110px;padding:14px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px}
-.stat .val{font-size:28px;font-weight:700;color:var(--text-0)}
+.stat .val{font-size:28px;font-weight:600;color:var(--text-0)}
 .stat .lbl{font-size:12px;color:var(--text-2);margin-top:2px}
 .stat.green .val{color:var(--green)} .stat.red .val{color:var(--red)} .stat.accent .val{color:var(--accent)}
 
@@ -65,7 +68,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-2);padding:1px 
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;padding:8px 12px;background:var(--bg-2);color:var(--text-1);font-weight:600;white-space:nowrap;position:sticky;top:0}
 td{padding:7px 12px;border-top:1px solid var(--border-light);vertical-align:top}
-tr:hover td{background:rgba(180,160,140,.04)}
+tr:hover td{background:rgba(160,150,140,.04)}
 tr.new td{background:var(--accent-bg)}
 tr.danger td{background:var(--red-bg)}
 td.t{color:var(--accent);font-weight:600}
@@ -113,7 +116,7 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .cc{width:58px;padding:4px 2px;text-align:center;border-radius:3px;background:var(--bg-2);transition:all .3s;cursor:default}
 .cc .ci{font-size:8px;color:var(--text-2);font-family:var(--mono)}
 .cc .cv{font-size:10px;color:var(--text-1);font-family:var(--mono);margin-top:1px;white-space:nowrap}
-.grp.hi .cc{background:rgba(192,128,64,.12)}
+.grp.hi .cc{background:rgba(166,124,82,.10)}
 .grp.hi .cv{color:var(--accent);font-weight:600}
 .csr-result-box{font-size:14px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;margin:10px 0;min-height:60px;line-height:1.8}
 .csr-result-box .step-line{color:var(--text-1)}
@@ -126,7 +129,7 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .dc{width:70px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:10px;font-family:var(--mono);border:1px solid var(--border-light);transition:all .2s;cursor:default;position:relative}
 .dc.empty{background:var(--bg-1);color:var(--text-2)}
 .dc.hit{background:var(--green-bg);border-color:var(--green);color:var(--green);font-weight:700;cursor:pointer}
-.dc.hit:hover{transform:scale(1.06);box-shadow:0 0 12px rgba(92,138,80,.3)}
+.dc.hit:hover{transform:scale(1.06);box-shadow:0 0 12px rgba(107,143,107,.2)}
 .dc.hdr{background:none;border:none;color:var(--text-2);font-weight:600;font-size:10px}
 .dense-tooltip{font-size:12px;color:var(--text-1);margin-top:6px;min-height:18px}
 
@@ -135,7 +138,7 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .lc{padding:10px 14px;border:1px solid var(--border-light);border-radius:8px;background:var(--bg-1);text-align:center;min-width:100px;transition:all .2s}
 .lc:hover{border-color:var(--accent);transform:translateY(-2px)}
 .lc .lc-st{font-size:10px;color:var(--text-2);font-family:var(--mono)}
-.lc .lc-items{font-size:15px;font-weight:700;margin:6px 0 2px;letter-spacing:1px}
+.lc .lc-items{font-size:15px;font-weight:600;margin:6px 0 2px;letter-spacing:1px}
 .lc .lc-ids{font-size:9px;color:var(--text-2);font-family:var(--mono)}
 .lc.shared{border-color:var(--yellow);background:var(--yellow-bg)}
 .lc.shared:hover{border-color:var(--yellow)}
@@ -170,9 +173,9 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .vp-code-toggle:hover{text-decoration:underline}
 .vp-code-block{font-family:var(--mono);font-size:12px;background:var(--bg-2);border:1px solid var(--border-light);border-radius:6px;padding:12px 16px;margin:8px 0;color:var(--text-1);line-height:1.7;overflow-x:auto;white-space:pre;display:none}
 .vp-code-block.show{display:block}
-.vp-code-block .kw{color:#c25a4a}
-.vp-code-block .fn{color:#9878b0}
-.vp-code-block .cm{color:#a69890}
+.vp-code-block .kw{color:#b06a60}
+.vp-code-block .fn{color:#8a7fa0}
+.vp-code-block .cm{color:#b0a89f}
 #vp-trie .node rect{transition:fill .4s,stroke .4s,stroke-width .4s}
 #vp-trie .node text{transition:fill .4s}
 #vp-trie .edge{transition:stroke .4s,opacity .4s,stroke-width .4s}
@@ -189,14 +192,14 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .tc:hover{border-color:var(--accent);transform:translateY(-1px)}
 .tc.dim{opacity:.25;transform:scale(.98)}
 .tc .tc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.tc .tc-name{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent)}
+.tc .tc-name{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--accent)}
 .tc .tc-shape{font-family:var(--mono);font-size:11px;color:var(--text-2)}
 .tc .tc-desc{font-size:13px;color:var(--text-1);margin-bottom:8px}
 .tc .tc-badges{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
 .pp{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600}
-.pp.p2{background:rgba(194,90,74,.12);color:#c25a4a}
-.pp.p3{background:rgba(192,128,64,.1);color:#c08040}
-.pp.p4{background:rgba(92,138,80,.12);color:#5c8a50}
+.pp.p2{background:rgba(176,106,96,.12);color:#b06a60}
+.pp.p3{background:rgba(166,124,82,.1);color:#a67c52}
+.pp.p4{background:rgba(107,143,107,.12);color:#6b8f6b}
 .tc .tc-usage{font-size:12px;background:var(--bg-2);border-radius:4px;padding:8px 10px;line-height:1.7}
 .tc .tc-usage code{font-size:11px;color:var(--accent)}
 .tc .tc-usage .uline{color:var(--text-1);margin:2px 0}
@@ -735,7 +738,7 @@ const edgeEls = {}, nodeEls = {};
 layers.forEach((l, i) => {
   const t = document.createElementNS(NS,'text');
   t.setAttribute('x','8'); t.setAttribute('y', layerY[i] + NH/2 + 4);
-  t.setAttribute('fill','#a69890'); t.setAttribute('font-size','11');
+  t.setAttribute('fill','#b0a89f'); t.setAttribute('font-size','11');
   t.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
   t.setAttribute('font-weight','500');
   t.textContent = l; svg.appendChild(t);
@@ -751,7 +754,7 @@ edges.forEach(([from, to]) => {
   const p = document.createElementNS(NS,'path');
   p.setAttribute('d', `M ${sx} ${sy} C ${sx} ${my}, ${tx} ${my}, ${tx} ${ty}`);
   p.setAttribute('fill','none');
-  p.setAttribute('stroke','#e0d6cc');
+  p.setAttribute('stroke','#e5ddd5');
   p.setAttribute('stroke-width','1.5');
   p.classList.add('edge');
   const eid = `${from}-${to}`;
@@ -773,14 +776,14 @@ nodes.forEach(n => {
   r.setAttribute('x', n.x); r.setAttribute('y', n.y);
   r.setAttribute('width', NW); r.setAttribute('height', NH);
   r.setAttribute('rx','6');
-  r.setAttribute('fill','#ffffff'); r.setAttribute('stroke','#e0d6cc');
+  r.setAttribute('fill','#ffffff'); r.setAttribute('stroke','#e5ddd5');
   r.setAttribute('stroke-width','1');
   g.appendChild(r);
 
   const t1 = document.createElementNS(NS,'text');
   t1.setAttribute('x', n.x + NW/2); t1.setAttribute('y', n.y + 16);
   t1.setAttribute('text-anchor','middle');
-  t1.setAttribute('fill','#2d2420'); t1.setAttribute('font-size','11');
+  t1.setAttribute('fill','#3a3530'); t1.setAttribute('font-size','11');
   t1.setAttribute('font-weight','600');
   t1.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
   t1.textContent = n.label;
@@ -789,7 +792,7 @@ nodes.forEach(n => {
   const t2 = document.createElementNS(NS,'text');
   t2.setAttribute('x', n.x + NW/2); t2.setAttribute('y', n.y + 30);
   t2.setAttribute('text-anchor','middle');
-  t2.setAttribute('fill','#6b5d55'); t2.setAttribute('font-size','9');
+  t2.setAttribute('fill','#7a7168'); t2.setAttribute('font-size','9');
   t2.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
   t2.textContent = n.sub;
   g.appendChild(t2);
@@ -809,26 +812,26 @@ function applyView() {
 
   nodes.forEach(n => {
     const el = nodeEls[n.id];
-    let fill = '#ffffff', stroke = '#e0d6cc', op = 1, sw = 1;
-    let t1c = '#2d2420', t2c = '#6b5d55';
+    let fill = '#ffffff', stroke = '#e5ddd5', op = 1, sw = 1;
+    let t1c = '#3a3530', t2c = '#7a7168';
 
     if (currentMode === 'pruned' || currentMode === 'beam') {
       if (n.valid) {
-        stroke = n.leaf ? '#5c8a50' : '#c08040';
-        fill = n.leaf ? 'rgba(92,138,80,.08)' : 'rgba(192,128,64,.08)';
+        stroke = n.leaf ? '#6b8f6b' : '#a67c52';
+        fill = n.leaf ? 'rgba(107,143,107,.08)' : 'rgba(166,124,82,.08)';
       } else {
-        op = .2; stroke = '#e0d6cc'; fill = '#f3ede7';
-        t1c = '#a69890'; t2c = '#a69890';
+        op = .2; stroke = '#e5ddd5'; fill = '#f2eeea';
+        t1c = '#b0a89f'; t2c = '#b0a89f';
       }
     }
     if (currentMode === 'beam') {
       const bs = beamSteps[beamStep];
       if (bs.tips.includes(n.id)) {
-        fill = 'rgba(184,144,48,.18)'; stroke = '#b89030'; sw = 2.5; op = 1;
-        t1c = '#2d2420'; t2c = '#b89030';
+        fill = 'rgba(160,136,88,.18)'; stroke = '#a08858'; sw = 2.5; op = 1;
+        t1c = '#3a3530'; t2c = '#a08858';
       } else if (bs.pathN.includes(n.id)) {
-        fill = 'rgba(192,128,64,.1)'; stroke = '#c08040'; sw = 1.5; op = 1;
-        t1c = '#2d2420'; t2c = '#6b5d55';
+        fill = 'rgba(166,124,82,.1)'; stroke = '#a67c52'; sw = 1.5; op = 1;
+        t1c = '#3a3530'; t2c = '#7a7168';
       }
     }
     el.rect.setAttribute('fill', fill);
@@ -843,15 +846,15 @@ function applyView() {
     const eid = `${from}-${to}`;
     const p = edgeEls[eid];
     const fv = nodeMap[from].valid, tv = nodeMap[to].valid;
-    let color = '#e0d6cc', op = .6, sw = 1.5, dash = '';
+    let color = '#e5ddd5', op = .6, sw = 1.5, dash = '';
 
     if (currentMode === 'pruned' || currentMode === 'beam') {
-      if (fv && tv) { color = '#c08040'; op = .5; } else { op = .1; dash = '4 3'; }
+      if (fv && tv) { color = '#a67c52'; op = .5; } else { op = .1; dash = '4 3'; }
     }
     if (currentMode === 'beam') {
       const bs = beamSteps[beamStep];
       if (bs.pathE.includes(eid)) {
-        color = '#b89030'; op = .9; sw = 2.5; dash = '';
+        color = '#a08858'; op = .9; sw = 2.5; dash = '';
       }
     }
     p.setAttribute('stroke', color);
@@ -1189,7 +1192,7 @@ const vpNodeEls = {}, vpEdgeEls2 = {};
 ['L0','L1','L2','L3','L4 (叶)'].forEach((l, i) => {
   const t = document.createElementNS(NS,'text');
   t.setAttribute('x','2'); t.setAttribute('y', [10,80,150,220,300][i] + vpNH/2 + 4);
-  t.setAttribute('fill','#a69890'); t.setAttribute('font-size','10');
+  t.setAttribute('fill','#b0a89f'); t.setAttribute('font-size','10');
   t.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
   t.setAttribute('font-weight','500');
   t.textContent = l; vpSvg.appendChild(t);
@@ -1203,7 +1206,7 @@ vpEdgeList.forEach(([from, to]) => {
   const p = document.createElementNS(NS,'path');
   p.setAttribute('d',`M ${sx} ${sy} C ${sx} ${my}, ${tx} ${my}, ${tx} ${ty}`);
   p.setAttribute('fill','none');
-  p.setAttribute('stroke','#e0d6cc');
+  p.setAttribute('stroke','#e5ddd5');
   p.setAttribute('stroke-width','1.5');
   p.classList.add('edge');
   vpEdgeEls2[`${from}-${to}`] = p;
@@ -1219,14 +1222,14 @@ vpNodes.forEach(n => {
   r.setAttribute('x',n.x); r.setAttribute('y',n.y);
   r.setAttribute('width',vpNW); r.setAttribute('height',vpNH);
   r.setAttribute('rx','5');
-  r.setAttribute('fill','#ffffff'); r.setAttribute('stroke','#e0d6cc');
+  r.setAttribute('fill','#ffffff'); r.setAttribute('stroke','#e5ddd5');
   r.setAttribute('stroke-width','1');
   g.appendChild(r);
 
   const t1 = document.createElementNS(NS,'text');
   t1.setAttribute('x',n.x+vpNW/2); t1.setAttribute('y',n.y+14);
   t1.setAttribute('text-anchor','middle');
-  t1.setAttribute('fill','#2d2420'); t1.setAttribute('font-size','10');
+  t1.setAttribute('fill','#3a3530'); t1.setAttribute('font-size','10');
   t1.setAttribute('font-weight','600');
   t1.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
   t1.textContent = n.label;
@@ -1235,7 +1238,7 @@ vpNodes.forEach(n => {
   const t2 = document.createElementNS(NS,'text');
   t2.setAttribute('x',n.x+vpNW/2); t2.setAttribute('y',n.y+28);
   t2.setAttribute('text-anchor','middle');
-  t2.setAttribute('fill','#6b5d55'); t2.setAttribute('font-size','9');
+  t2.setAttribute('fill','#7a7168'); t2.setAttribute('font-size','9');
   t2.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
   t2.textContent = n.sub||'';
   g.appendChild(t2);
@@ -1243,8 +1246,8 @@ vpNodes.forEach(n => {
   const ci = document.createElementNS(NS,'circle');
   ci.setAttribute('cx',n.x+vpNW-6); ci.setAttribute('cy',n.y+7);
   ci.setAttribute('r','4.5');
-  ci.setAttribute('fill','#e0d6cc');
-  ci.setAttribute('stroke','#ebe3db');
+  ci.setAttribute('fill','#e5ddd5');
+  ci.setAttribute('stroke','#eee8e2');
   ci.setAttribute('stroke-width','1');
   g.appendChild(ci);
 
@@ -1300,27 +1303,27 @@ function updateVPTrie(computed, activeLayerIdx) {
 
     if (isComputed) {
       if (valid) {
-        el.rect.setAttribute('fill', isActive ? 'rgba(92,138,80,.15)' : 'rgba(92,138,80,.08)');
-        el.rect.setAttribute('stroke', '#5c8a50');
+        el.rect.setAttribute('fill', isActive ? 'rgba(107,143,107,.15)' : 'rgba(107,143,107,.08)');
+        el.rect.setAttribute('stroke', '#6b8f6b');
         el.rect.setAttribute('stroke-width', isActive ? '2' : '1.5');
-        el.indicator.setAttribute('fill', '#5c8a50');
-        el.t1.setAttribute('fill', '#2d2420');
-        el.t2.setAttribute('fill', '#5c8a50');
+        el.indicator.setAttribute('fill', '#6b8f6b');
+        el.t1.setAttribute('fill', '#3a3530');
+        el.t2.setAttribute('fill', '#6b8f6b');
       } else {
-        el.rect.setAttribute('fill', 'rgba(194,90,74,.06)');
-        el.rect.setAttribute('stroke', '#c25a4a');
+        el.rect.setAttribute('fill', 'rgba(176,106,96,.06)');
+        el.rect.setAttribute('stroke', '#b06a60');
         el.rect.setAttribute('stroke-width', isActive ? '2' : '1');
-        el.indicator.setAttribute('fill', '#c25a4a');
-        el.t1.setAttribute('fill', '#a69890');
-        el.t2.setAttribute('fill', '#a69890');
+        el.indicator.setAttribute('fill', '#b06a60');
+        el.t1.setAttribute('fill', '#b0a89f');
+        el.t2.setAttribute('fill', '#b0a89f');
       }
     } else {
       el.rect.setAttribute('fill', '#ffffff');
-      el.rect.setAttribute('stroke', '#e0d6cc');
+      el.rect.setAttribute('stroke', '#e5ddd5');
       el.rect.setAttribute('stroke-width', '1');
-      el.indicator.setAttribute('fill', '#e0d6cc');
-      el.t1.setAttribute('fill', '#2d2420');
-      el.t2.setAttribute('fill', '#6b5d55');
+      el.indicator.setAttribute('fill', '#e5ddd5');
+      el.t1.setAttribute('fill', '#3a3530');
+      el.t2.setAttribute('fill', '#7a7168');
     }
   });
 
@@ -1330,18 +1333,18 @@ function updateVPTrie(computed, activeLayerIdx) {
     if (fc && tc) {
       const fv = vpValidResult[from], tv = vpValidResult[to];
       if (fv && tv) {
-        p.setAttribute('stroke', '#5c8a50'); p.style.opacity = '.7';
+        p.setAttribute('stroke', '#6b8f6b'); p.style.opacity = '.7';
         p.setAttribute('stroke-width', '2'); p.setAttribute('stroke-dasharray', '');
       } else {
-        p.setAttribute('stroke', '#c25a4a'); p.style.opacity = '.2';
+        p.setAttribute('stroke', '#b06a60'); p.style.opacity = '.2';
         p.setAttribute('stroke-width', '1'); p.setAttribute('stroke-dasharray', '4 3');
       }
     } else if (tc) {
       const tv = vpValidResult[to];
-      p.setAttribute('stroke', tv ? '#5c8a50' : '#c25a4a'); p.style.opacity = '.35';
+      p.setAttribute('stroke', tv ? '#6b8f6b' : '#b06a60'); p.style.opacity = '.35';
       p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-dasharray', '');
     } else {
-      p.setAttribute('stroke', '#e0d6cc'); p.style.opacity = '.6';
+      p.setAttribute('stroke', '#e5ddd5'); p.style.opacity = '.6';
       p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-dasharray', '');
     }
   });
