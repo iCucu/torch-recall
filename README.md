@@ -192,10 +192,15 @@ torch-recall/
 │       │   │   ├── recall.py            TargetingRecall(RecallOp)
 │       │   │   ├── builder.py           TargetingBuilder
 │       │   │   └── encoder.py           encode_user
-│       │   └── knn/                     K 近邻召回
-│       │       ├── recall.py            KNNRecall(RecallOp)
-│       │       ├── builder.py           KNNBuilder
-│       │       └── encoder.py           encode_query
+│       │   ├── knn/                     K 近邻召回
+│       │   │   ├── recall.py            KNNRecall(RecallOp)
+│       │   │   ├── builder.py           KNNBuilder
+│       │   │   └── encoder.py           encode_query
+│       │   └── generative/              生成式召回 (Trie + Beam Search)
+│       │       ├── recall.py            GenerativeRecall(RecallOp)
+│       │       ├── trie.py              Trie: Dense/CSR 混合前缀树
+│       │       ├── builder.py           GenerativeBuilder
+│       │       └── decoder.py           MockDecoder (测试用)
 │       ├── scheduler/
 │       │   ├── spec.py                  Targeting, KNN, And, Or 声明式 spec
 │       │   ├── pipeline.py              AndModule, OrModule, RecallPipeline
@@ -207,8 +212,13 @@ torch-recall/
 ├── inference/                    通用 C++ 推理引擎
 ├── examples/                            端到端演示
 └── docs/
+    ├── index.html                       文档首页 (项目总览)
     ├── architecture.md                  框架架构
-    └── targeting/                       定向召回文档
+    ├── targeting/                       定向召回文档
+    └── generative/                      生成式召回文档
+        ├── README.md                    设计概览
+        ├── walkthrough.md               端到端示例 (源文档)
+        └── walkthrough.html             端到端示例 (交互式)
 ```
 
 ## 文档
@@ -220,3 +230,5 @@ torch-recall/
 | [docs/targeting/implementation.md](docs/targeting/implementation.md) | 定向召回模块实现参考 |
 | [docs/targeting/walkthrough.md](docs/targeting/walkthrough.md) | 定向召回端到端示例详解 |
 | [docs/targeting/benchmark.md](docs/targeting/benchmark.md) | 定向召回性能测试结果 |
+| [docs/generative/README.md](docs/generative/README.md) | 生成式召回设计与架构 |
+| [docs/generative/walkthrough.html](docs/generative/walkthrough.html) | 生成式召回端到端交互式示例 |

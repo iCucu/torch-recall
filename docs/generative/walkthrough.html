@@ -580,7 +580,7 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
       <div class="tc-badges"><span class="pp p3">Phase 3 · Dense 步</span></div>
       <div class="tc-usage">
         <div class="uline"><code>st_table = <b>dense_states</b>[parent_tok]</code> → [B*beam, V]</div>
-        <div class="uline"><code>new_states = st_table.gather(1, top_tk)</code></div>
+        <div class="uline"><code>new_st = st3[bi, top_bm, top_tk]</code>  (st3 = st_table.view(B, beam, V))</div>
         <div class="uhigh">→ 与 dense_mask 配合，获取子节点 state ID，无需 CSR 查表即可 O(1) 定位。</div>
         <div class="utip">本例: dense_states[0,1]=2049, dense_states[0,2]=2050。</div>
       </div>

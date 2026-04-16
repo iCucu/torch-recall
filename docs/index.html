@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>torch-recall — 文档中心</title>
+<style>
+:root {
+  --bg-0: #0d1117; --bg-1: #161b22; --bg-2: #21262d;
+  --bg-card: #161b22; --border: #30363d; --border-light: #21262d;
+  --text-0: #e6edf3; --text-1: #8b949e; --text-2: #6e7681;
+  --accent: #58a6ff; --accent-bg: rgba(88,166,255,.1);
+  --green: #3fb950; --green-bg: rgba(63,185,80,.12);
+  --red: #f85149; --red-bg: rgba(248,81,73,.12);
+  --yellow: #d29922; --yellow-bg: rgba(210,153,34,.15);
+  --purple: #bc8cff; --purple-bg: rgba(188,140,255,.1);
+  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
+  --mono: 'SF Mono','Fira Code','JetBrains Mono','Menlo',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-height:1.65;min-height:100vh}
+
+/* ── Header ── */
+.hero{padding:60px 40px 48px;max-width:960px;margin:0 auto}
+.hero h1{font-size:32px;font-weight:700;margin-bottom:8px;letter-spacing:-.5px}
+.hero h1 span{color:var(--accent)}
+.hero .sub{font-size:15px;color:var(--text-1);max-width:640px;margin-bottom:28px}
+.hero .badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:32px}
+.hero .badge{font-size:11px;padding:3px 10px;border-radius:99px;font-weight:600;border:1px solid}
+.badge.py{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.badge.torch{border-color:var(--red);color:var(--red);background:var(--red-bg)}
+.badge.cpp{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+
+/* ── Sections ── */
+.container{max-width:960px;margin:0 auto;padding:0 40px 80px}
+section{margin-bottom:56px}
+h2{font-size:20px;font-weight:600;margin:0 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border-light);color:var(--text-0)}
+h3{font-size:15px;font-weight:600;margin:20px 0 8px;color:var(--text-0)}
+p{color:var(--text-1);font-size:14px;margin-bottom:12px;max-width:720px}
+code{font-family:var(--mono);font-size:.85em;background:var(--bg-2);padding:1px 5px;border-radius:4px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── Architecture ── */
+.arch-box{background:var(--bg-1);border:1px solid var(--border-light);border-radius:10px;padding:20px 24px;margin:16px 0;font-family:var(--mono);font-size:12px;line-height:1.8;color:var(--text-1);overflow-x:auto;white-space:pre}
+.arch-box .hl{color:var(--accent);font-weight:600}
+.arch-box .g{color:var(--green)}
+.arch-box .r{color:var(--red)}
+.arch-box .y{color:var(--yellow)}
+.arch-box .p{color:var(--purple)}
+
+/* ── Forward Signature ── */
+.sig-box{display:inline-block;background:var(--bg-2);border:1px solid var(--border-light);border-radius:8px;padding:10px 20px;font-family:var(--mono);font-size:13px;color:var(--text-1);margin:8px 0}
+.sig-box .kw{color:var(--purple)}
+.sig-box .ty{color:var(--green)}
+.sig-box .fn{color:var(--accent);font-weight:600}
+
+/* ── Method Cards ── */
+.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+@media(max-width:700px){.method-grid{grid-template-columns:1fr}}
+.mc{padding:20px;border:1px solid var(--border-light);border-radius:10px;background:var(--bg-card);transition:all .2s;display:flex;flex-direction:column}
+.mc:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.mc .mc-icon{font-size:28px;margin-bottom:10px}
+.mc .mc-title{font-size:16px;font-weight:700;margin-bottom:4px}
+.mc .mc-desc{font-size:13px;color:var(--text-1);flex:1;margin-bottom:12px;line-height:1.6}
+.mc .mc-tags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+.mc .mc-tag{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:500}
+.mc .mc-tag.blue{background:var(--accent-bg);color:var(--accent)}
+.mc .mc-tag.green{background:var(--green-bg);color:var(--green)}
+.mc .mc-tag.yellow{background:var(--yellow-bg);color:var(--yellow)}
+.mc .mc-tag.red{background:var(--red-bg);color:var(--red)}
+.mc .mc-tag.purple{background:var(--purple-bg);color:var(--purple)}
+.mc .mc-link{font-size:12px;color:var(--accent);font-weight:500}
+.mc .mc-link:hover{text-decoration:underline}
+
+/* ── Pipeline ── */
+.pipe-flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;padding:14px 18px;background:var(--bg-1);border:1px solid var(--border-light);border-radius:8px}
+.pipe-node{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid}
+.pipe-node.input{border-color:var(--text-2);color:var(--text-1)}
+.pipe-node.op{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.pipe-node.output{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+.pipe-arrow{color:var(--text-2);font-size:16px}
+
+/* ── Doc Index ── */
+.doc-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0}
+@media(max-width:700px){.doc-grid{grid-template-columns:1fr}}
+.dc{padding:14px 16px;border:1px solid var(--border-light);border-radius:8px;background:var(--bg-card);transition:all .2s;text-decoration:none;display:block}
+.dc:hover{border-color:var(--accent);transform:translateY(-1px);text-decoration:none}
+.dc .dc-cat{font-size:10px;color:var(--text-2);text-transform:uppercase;font-weight:600;letter-spacing:.5px;margin-bottom:4px}
+.dc .dc-title{font-size:13px;font-weight:600;color:var(--text-0);margin-bottom:4px}
+.dc .dc-desc{font-size:11px;color:var(--text-1)}
+.dc.highlight{border-color:var(--yellow);background:var(--yellow-bg)}
+.dc.highlight .dc-title{color:var(--yellow)}
+
+/* ── Code Structure ── */
+.tree{font-family:var(--mono);font-size:12px;color:var(--text-1);line-height:1.8;padding:16px 20px;background:var(--bg-1);border:1px solid var(--border-light);border-radius:8px;margin:12px 0;overflow-x:auto;white-space:pre}
+.tree .dir{color:var(--accent);font-weight:600}
+.tree .file{color:var(--text-0)}
+.tree .desc{color:var(--text-2)}
+
+/* ── Footer ── */
+.footer{text-align:center;padding:32px 0;font-size:12px;color:var(--text-2);border-top:1px solid var(--border-light);max-width:960px;margin:0 auto}
+</style>
+</head>
+<body>
+
+<!-- ── Hero ── -->
+<div class="hero">
+  <h1><span>torch-recall</span> 文档中心</h1>
+  <p class="sub">基于 PyTorch 的召回框架。每种召回方法实现为统一的 <code>RecallOp</code>（<code>nn.Module</code>），
+    通过声明式组合（<code>And</code> / <code>Or</code>）灵活编排，经 AOTInductor 导出为单一 <code>.pt2</code> 模型包。</p>
+  <div class="badges">
+    <span class="badge py">Python ≥ 3.10</span>
+    <span class="badge torch">PyTorch</span>
+    <span class="badge cpp">C++ 推理</span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ── 架构概览 ── -->
+<section id="arch">
+  <h2>架构概览</h2>
+  <p>所有召回方法共享统一的 <code>forward</code> 签名，可任意组合：</p>
+  <div class="sig-box">
+    <span class="kw">class</span> <span class="fn">RecallOp</span>(nn.Module):<br>
+    &nbsp;&nbsp;<span class="kw">def</span> <span class="fn">forward</span>(self, pred_satisfied: <span class="ty">Tensor[B, P]</span>, query: <span class="ty">Tensor[B, D]</span>) → <span class="ty">Tensor[B, N]</span>
+  </div>
+  <div class="arch-box"><span class="hl">共享组件</span>                             <span class="hl">召回方法 (RecallOp)</span>
+┌─────────────────────────────┐   ┌──────────────────────────────┐
+│  Schema / Item  数据定义     │   │  <span class="y">targeting/</span>                  │
+│  RecallOp       统一算子接口  │   │    TargetingRecall — 布尔规则  │
+│  query/         表达式解析   │   ├──────────────────────────────┤
+│  tokenizer      分词器       │   │  <span class="g">knn/</span>                        │
+│                              │   │    KNNRecall — 向量相似度      │
+│  <span class="p">scheduler/</span>    声明式组合    │   ├──────────────────────────────┤
+│    And / Or    交集 / 并集   │   │  <span class="r">generative/</span>                 │
+│    Pipeline    topk 输出     │   │    GenerativeRecall — Trie +  │
+│    exporter    .pt2 导出     │   │    约束 Beam Search           │
+└─────────────────────────────┘   └──────────────────────────────┘</div>
+</section>
+
+<!-- ── 召回方法 ── -->
+<section id="methods">
+  <h2>召回方法</h2>
+  <div class="method-grid">
+
+    <div class="mc">
+      <div class="mc-icon">🎯</div>
+      <div class="mc-title">Targeting 定向召回</div>
+      <div class="mc-desc">布尔规则匹配。根据用户属性评估每个 item 的定向规则，返回 0.0（匹配）或 -inf（不匹配）。
+        支持 <code>==</code> <code>!=</code> <code>&gt;</code> <code>&lt;</code> <code>contains</code> 等运算符和 AND/OR/NOT 连接。</div>
+      <div class="mc-tags">
+        <span class="mc-tag yellow">精确过滤</span>
+        <span class="mc-tag blue">O(B×P×C)</span>
+      </div>
+      <a class="mc-link" href="targeting/walkthrough.md">→ 端到端示例</a>
+    </div>
+
+    <div class="mc">
+      <div class="mc-icon">📐</div>
+      <div class="mc-title">KNN 近邻召回</div>
+      <div class="mc-desc">向量相似度检索。将 item 和 query 映射为 embedding，通过 brute-force matmul 计算内积、余弦或 L2 相似度。</div>
+      <div class="mc-tags">
+        <span class="mc-tag green">语义匹配</span>
+        <span class="mc-tag blue">inner_product / cosine / l2</span>
+      </div>
+      <span class="mc-link" style="color:var(--text-2)">文档编写中</span>
+    </div>
+
+    <div class="mc" style="grid-column:1/-1">
+      <div class="mc-icon">🌳</div>
+      <div class="mc-title">Generative 生成式召回</div>
+      <div class="mc-desc">将每个 item 编码为固定长度的语义 ID 路径 (SID)，组织成 Trie 前缀树。在线推理时：
+        (1) Targeting 过滤 → (2) Validity Propagation 自底向上剪枝 → (3) Decoder 自回归 Beam Search（Dense/CSR 混合查表） → (4) 叶子反解为 item 分数。
+        全流程纯 tensor 操作，兼容 <code>torch.export</code>。</div>
+      <div class="mc-tags">
+        <span class="mc-tag red">自回归解码</span>
+        <span class="mc-tag purple">Trie 约束</span>
+        <span class="mc-tag blue">beam_width 可配</span>
+        <span class="mc-tag green">Dense + CSR 混合</span>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <a class="mc-link" href="generative/README.md">→ 设计文档</a>
+        <a class="mc-link" href="generative/walkthrough.html" style="color:var(--yellow)">→ 交互式端到端示例 ★</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Pipeline 组合 ── -->
+<section id="pipeline">
+  <h2>声明式组合 Pipeline</h2>
+  <p>通过 <code>And</code>（交集/分数求和）和 <code>Or</code>（并集/分数取 max）组合多种召回方法，编译为单一模型。</p>
+  <div class="pipe-flow">
+    <span class="pipe-node input">pred_satisfied [B, P]</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-node op">And / Or</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-node op">RecallOp × N</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-node op">topk(K)</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-node output">scores, indices [B, K]</span>
+  </div>
+  <h3>组合示例</h3>
+  <div class="tree"><span class="dir">And</span>(Targeting, KNN)              <span class="desc">← 定向过滤 + KNN 排序</span>
+<span class="dir">Or</span>(KNN("cosine"), KNN("l2"))       <span class="desc">← 多路 KNN 取并集</span>
+<span class="dir">Or</span>(                                 <span class="desc">← 复杂嵌套</span>
+    <span class="dir">And</span>(Targeting, KNN("cosine")),
+    Generative(decoder, beam=10),
+)</div>
+</section>
+
+<!-- ── 文档索引 ── -->
+<section id="docs">
+  <h2>文档索引</h2>
+  <div class="doc-grid">
+
+    <a class="dc" href="architecture.md">
+      <div class="dc-cat">框架</div>
+      <div class="dc-title">Architecture</div>
+      <div class="dc-desc">框架架构、共享组件、扩展方式</div>
+    </a>
+
+    <a class="dc" href="targeting/design.md">
+      <div class="dc-cat">Targeting</div>
+      <div class="dc-title">设计文档</div>
+      <div class="dc-desc">定向召回设计与优化策略</div>
+    </a>
+
+    <a class="dc" href="targeting/implementation.md">
+      <div class="dc-cat">Targeting</div>
+      <div class="dc-title">实现参考</div>
+      <div class="dc-desc">模块实现细节</div>
+    </a>
+
+    <a class="dc" href="targeting/walkthrough.md">
+      <div class="dc-cat">Targeting</div>
+      <div class="dc-title">端到端示例</div>
+      <div class="dc-desc">完整的定向召回构建+查询流程</div>
+    </a>
+
+    <a class="dc" href="targeting/benchmark.md">
+      <div class="dc-cat">Targeting</div>
+      <div class="dc-title">性能测试</div>
+      <div class="dc-desc">定向召回性能基准结果</div>
+    </a>
+
+    <a class="dc" href="generative/README.md">
+      <div class="dc-cat">Generative</div>
+      <div class="dc-title">设计文档</div>
+      <div class="dc-desc">生成式召回架构、Trie 结构、推理流程</div>
+    </a>
+
+    <a class="dc highlight" href="generative/walkthrough.html">
+      <div class="dc-cat">Generative ★</div>
+      <div class="dc-title">交互式端到端示例</div>
+      <div class="dc-desc">7 个 item 完整走一遍构建和推理，含可视化 Trie 和 Beam Search 动画</div>
+    </a>
+
+    <a class="dc" href="specs/2026-04-10-generative-recall-design.md">
+      <div class="dc-cat">Spec</div>
+      <div class="dc-title">Generative Recall 设计</div>
+      <div class="dc-desc">生成式召回技术方案</div>
+    </a>
+
+    <a class="dc" href="specs/2026-04-08-bitmap-inverted-index-design.md">
+      <div class="dc-cat">Spec</div>
+      <div class="dc-title">Bitmap Index 设计</div>
+      <div class="dc-desc">位图倒排索引技术方案</div>
+    </a>
+
+  </div>
+</section>
+
+<!-- ── 代码结构 ── -->
+<section id="structure">
+  <h2>代码结构</h2>
+  <div class="tree"><span class="dir">torch-recall/</span>
+├── <span class="dir">index/</span>
+│   ├── pyproject.toml                        <span class="desc">包配置 (torch-recall)</span>
+│   ├── <span class="dir">torch_recall/</span>
+│   │   ├── <span class="file">schema.py</span>                     <span class="desc">Schema, Item 数据定义</span>
+│   │   ├── <span class="file">recall_method/</span>
+│   │   │   ├── <span class="file">base.py</span>                   <span class="desc">RecallOp 统一算子基类</span>
+│   │   │   ├── <span class="dir">targeting/</span>                <span class="desc">定向召回</span>
+│   │   │   │   ├── recall.py  builder.py  encoder.py
+│   │   │   ├── <span class="dir">knn/</span>                      <span class="desc">K 近邻召回</span>
+│   │   │   │   ├── recall.py  builder.py  encoder.py
+│   │   │   └── <span class="dir">generative/</span>               <span class="desc">生成式召回</span>
+│   │   │       ├── <span class="file">recall.py</span>             <span class="desc">GenerativeRecall(RecallOp)</span>
+│   │   │       ├── <span class="file">trie.py</span>               <span class="desc">Trie: Dense/CSR 混合前缀树</span>
+│   │   │       ├── <span class="file">builder.py</span>            <span class="desc">GenerativeBuilder 向量化构建</span>
+│   │   │       └── <span class="file">decoder.py</span>            <span class="desc">MockDecoder (测试用)</span>
+│   │   ├── <span class="dir">scheduler/</span>                    <span class="desc">Pipeline 编排 + .pt2 导出</span>
+│   │   │   ├── spec.py  pipeline.py  pipeline_builder.py  encoder.py  exporter.py
+│   │   ├── <span class="dir">query/</span>                        <span class="desc">布尔表达式解析 + DNF</span>
+│   │   └── <span class="file">tokenizer.py</span>                  <span class="desc">分词器</span>
+│   ├── <span class="dir">tests/</span>                            <span class="desc">pytest 测试</span>
+│   └── <span class="dir">benchmarks/</span>                       <span class="desc">性能基准</span>
+├── <span class="dir">inference/</span>                            <span class="desc">通用 C++ 推理引擎</span>
+├── <span class="dir">examples/</span>                             <span class="desc">端到端演示脚本</span>
+└── <span class="dir">docs/</span>                                 <span class="desc">设计文档与 spec</span></div>
+</section>
+
+<!-- ── 快速开始 ── -->
+<section id="quickstart">
+  <h2>快速开始</h2>
+  <div class="tree"><span class="desc"># 环境准备</span>
+git clone &lt;repo&gt; &amp;&amp; cd torch-recall
+uv venv --python 3.12 .venv &amp;&amp; source .venv/bin/activate
+uv pip install torch pytest jieba
+uv pip install -e "index[dev]"
+
+<span class="desc"># 运行测试</span>
+pytest index/tests/ -v
+
+<span class="desc"># 运行示例</span>
+PYTHONPATH=index python examples/05_generative_recall.py</div>
+</section>
+
+</div>
+
+<div class="footer">
+  torch-recall · PyTorch Recall Framework
+</div>
+
+</body>
+</html>
