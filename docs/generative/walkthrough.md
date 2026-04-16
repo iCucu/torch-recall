@@ -6,6 +6,53 @@
 
 ---
 
+## 0. 概述
+
+### 系统在解决什么问题？
+
+推荐系统需要从百万级别的候选 item 中为用户快速挑选出最相关的若干个。逐一打分太慢，
+因此本系统将每个 item **编码成一条固定长度的 token 路径**（语义 ID / SID），并把所有路径
+组织成一棵 **Trie 树**。在线推理时，通过 **Beam Search** 在 Trie 上逐层搜索，每步只保留
+分数最高的 `beam_width` 条路径，最终到达叶子节点即找到推荐 item。
+
+整个流程分两大阶段：
+
+```
+离线构建                              在线推理
+──────────                           ──────────
+items + sid_paths                     用户特征 + query
+      │                                     │
+      ▼                                     ▼
+  排序 → diff-scan                     Phase 1: Targeting Mask
+      │                                     │
+      ▼                                     ▼
+  分配 State ID                        Phase 2: Validity Propagation (自底向上剪枝)
+      │                                     │
+      ▼                                     ▼
+  构建 CSR + Dense + Leaf 表           Phase 3: Beam Search (逐层选 topk)
+      │                                     │
+      ▼                                     ▼
+  Trie (torch.nn.Module)              Phase 4: Resolve Leaves → 输出 item 分数
+```
+
+### 代码文件一览
+
+| 文件 | 职责 | 本文对应章节 |
+|------|------|------------|
+| `builder.py` → `GenerativeBuilder.build()` | 离线构建入口：排序、diff-scan、State ID 分配、CSR/Dense/Leaf 表构建 | §2 |
+| `builder.py` → `_build_static_index()` | 核心构建逻辑（纯 NumPy 向量化） | §2.1 ~ §2.8 |
+| `builder.py` → `_build_leaf_mapping()` | 叶子 → item 映射表 | §2.9 |
+| `trie.py` → `Trie` | 存储所有离线构建的 tensor（registered buffer） | §2.10 Tensor 速查 |
+| `trie.py` → `Trie.propagate_validity()` | 自底向上剪枝（Phase 2） | §3.3 |
+| `trie.py` → `Trie.resolve_leaves()` | 叶子 state → item 分数映射（Phase 4） | §3.5 |
+| `recall.py` → `GenerativeRecall.forward()` | 在线推理入口：Phase 1 ~ 4 总调度 | §3 |
+| `recall.py` → `GenerativeRecall._step_dense()` | Beam Search 的 Dense 步（前 d_dense 层） | §3.4 Step 1 |
+| `recall.py` → `GenerativeRecall._step_csr()` | Beam Search 的 CSR 步（d_dense 层之后） | §3.4 Step 2~4 |
+
+所有代码位于 `torch_recall/recall_method/generative/` 目录下。
+
+---
+
 ## 1. 输入数据
 
 7 个 item，使用了**两个不同的首 token（0 和 1）**，以体现 L0 层如何预分配 V 个 state 槽位。
@@ -67,6 +114,18 @@ row 5: [1, 3, 12, 13, 14]     5 (item f)
 row 6: [1, 4, 17, 18, 19]     6 (item g)
 ```
 
+> **对应代码** (`builder.py` → `GenerativeBuilder.build`):
+>
+> ```python
+> sid_paths = np.array([item.sid_path for item in items], dtype=np.int32)
+> sort_idx  = np.lexsort(sid_paths.T[::-1])   # 按字典序排序，返回排列后的行号
+> sorted_sids = sid_paths[sort_idx]            # 按排列重排，得到有序的路径矩阵
+> ```
+>
+> `np.lexsort` 接收的 key 顺序是**末列优先**，所以用 `[::-1]` 翻转使首列最优先，
+> 达到按 (d0, d1, d2, d3, d4) 字典序排的效果。排序后相同前缀的 item 相邻，
+> 为下一步 diff-scan 识别"分叉点"做好准备。
+
 ### 2.2 diff-scan
 
 比较每行与上一行，找首个不同的 depth：
@@ -94,7 +153,56 @@ row 5:    T      T      T      T      T     ← 首 token 变了，全部都新!
 row 6:    F      T      T      T      T     ← depth 1 起新分支
 ```
 
+> **对应代码** (`builder.py` → `_build_static_index`):
+>
+> ```python
+> # 第一行全部为新节点
+> is_new = np.zeros((N, L), dtype=bool)
+> is_new[0, :] = True
+>
+> # 逐行比较：sorted_sids[1:] 和 sorted_sids[:-1] 做 element-wise 比较
+> diff = sorted_sids[1:] != sorted_sids[:-1]          # [N-1, L] bool
+> first_diff = np.full(N - 1, L, dtype=np.int8)       # 默认值 L = "无差异"
+> has_diff = diff.any(axis=1)                          # 哪些行有差异
+> first_diff[has_diff] = diff[has_diff].argmax(axis=1) # 首个 True 的列号
+>
+> for depth in range(L):
+>     is_new[1:, depth] = first_diff <= depth          # 分叉点及之后都算"新"
+> ```
+>
+> **核心思想**：排序后，相邻行的差异呈现"从某个 depth 开始不同"的模式。
+> `first_diff` 找到这个分叉深度，然后**该深度及更深的所有层**都标记为新节点。
+> 例如 row 2 vs row 1 在 depth 2 分叉，则 depth 2、3、4 都需要创建新的 Trie 节点。
+
 ### 2.3 分配 State ID
+
+> **对应代码** (`builder.py` → `_build_static_index`):
+>
+> ```python
+> state_ids = np.zeros((N, L), dtype=np.int32)
+> state_ids[:, 0] = sorted_sids[:, 0].astype(np.int32) + 1  # depth 0: state = token + 1
+>
+> level_start = [1]          # 每层首个 state 的 global ID
+> level_count = [V]          # 每层节点数（L0 固定为 V）
+> cur = V + 1                # 下一个可用的 state ID
+>
+> for depth in range(1, L):
+>     mask = is_new[:, depth]                                 # 本层哪些行是新节点
+>     n_new = int(mask.sum())
+>     level_start.append(cur)
+>     level_count.append(n_new)
+>     state_ids[mask, depth] = np.arange(cur, cur + n_new)   # 给新节点分配连续 ID
+>     state_ids[:, depth] = np.maximum.accumulate(state_ids[:, depth])  # 向下填充
+>     cur += n_new
+> ```
+>
+> **两个关键点**：
+>
+> - **depth 0 特殊处理**：`state = token + 1`，预分配 V 个槽位，保证后续 Dense 表能用
+>   token 值直接做下标索引（O(1) 查表）。
+> - **`np.maximum.accumulate`**（向下填充）：只有 `is_new=True` 的行被分配了新 ID，
+>   其他行（共享前缀的 item）的 ID 还是 0。`maximum.accumulate` 沿行方向"继承"
+>   前面最近一次分配的 ID，使共享前缀的 item 自动获得相同的 state ID。
 
 **depth 0**：固定映射 `state = token + 1`
 
@@ -228,6 +336,39 @@ St2063 St2064 St2065 St2066 St2067   St2068
 
 ### 2.6 packed_csr — 边表
 
+> **对应代码** (`builder.py` → `_build_static_index`):
+>
+> ```python
+> # ---- 边收集：遍历 depth 1~L-1，只取 is_new=True 的行 ----
+> all_par, all_tok, all_ch = [], [], []
+> for depth in range(1, L):
+>     mask = is_new[:, depth]
+>     all_par.append(state_ids[mask, depth - 1])  # 父节点 state ID
+>     all_tok.append(sorted_sids[mask, depth])     # 走到这个子节点用的 token 值
+>     all_ch.append(state_ids[mask, depth])         # 子节点 state ID
+>
+> parents  = np.concatenate(all_par)    # 所有边的父节点
+> tokens   = np.concatenate(all_tok)    # 所有边的 token
+> children = np.concatenate(all_ch)     # 所有边的子节点
+>
+> # ---- CSR 格式打包 ----
+> # bincount 统计每个 state 有多少条出边
+> counts = np.bincount(parents, minlength=num_states)
+> # cumsum 得到前缀和 → CSR 行指针
+> indptr = np.zeros(num_states + 1, dtype=np.int32)
+> indptr[1:] = np.cumsum(counts)
+>
+> # OOB 安全填充：追加 V 行 [V, 0]，防止越界读取
+> raw_tok = np.concatenate([tokens, np.full(V, V, dtype=np.int32)])
+> raw_ch  = np.concatenate([children, np.zeros(V, dtype=np.int32)])
+> indptr  = np.append(indptr, indptr[-1] + V)
+> packed_csr = np.vstack([raw_tok, raw_ch]).T      # [E+V, 2]
+> ```
+>
+> **CSR（Compressed Sparse Row）** 是稀疏矩阵的经典存储格式。
+> `indptr` 是"指针数组"，`packed_csr` 是"数据数组"。查询某个 state 的所有子节点
+> 只需一次 slice：`packed_csr[indptr[s] : indptr[s+1]]`。
+
 共 20 条边：
 
 ```
@@ -301,6 +442,28 @@ packed_csr[16:18] → [[10, 2065], [11, 2066]]
 
 ### 2.8 Dense 表
 
+> **对应代码** (`builder.py` → `_build_static_index`):
+>
+> ```python
+> # start_mask: 哪些首 token 在 Trie 中出现过
+> start_mask = np.zeros(V, dtype=bool)
+> start_mask[np.unique(sorted_sids[:, 0])] = True
+>
+> # dense_mask / dense_states: 前 d_dense 层的 V^d 密集查表
+> dense_shape = tuple([V] * d_dense)                # d_dense=2 → (2048, 2048)
+> dense_mask = np.zeros(dense_shape, dtype=bool)
+> dense_states_arr = np.zeros(dense_shape, dtype=np.int32)
+>
+> # 用所有 item 的前 d_dense 个 token 作为多维下标，批量写入
+> indices = tuple(sorted_sids[:, i] for i in range(d_dense))  # (col0, col1)
+> dense_mask[indices] = True                                    # 标记存在
+> dense_states_arr[indices] = state_ids[:, d_dense - 1]        # 写入 state ID
+> ```
+>
+> **为什么用 Dense 表？** 前几层分支少（总共只有 V 或 V^2 种组合），用
+> 二维数组直接按下标索引是 O(1) 的，比在 CSR 中做二分查找快得多。
+> 代价是空间：`[2048, 2048]` 的数组中绝大多数位置是空的（本例只有 4 个 True）。
+
 **start_mask** [2048]：
 
 ```
@@ -328,6 +491,30 @@ dense_states[1, 4] = 2052   ← 前缀 (1, 4) → State 2052
 ```
 
 ### 2.9 Leaf → Item 映射
+
+> **对应代码** (`builder.py` → `_build_leaf_mapping`):
+>
+> ```python
+> def _build_leaf_mapping(state_ids, sort_idx, leaf_start, num_leaves):
+>     leaf_to_items = defaultdict(list)
+>     for i in range(N):
+>         local = int(state_ids[i, L - 1] - leaf_start)  # 叶子的局部索引
+>         leaf_to_items[local].append(int(sort_idx[i]))   # 记录原始 item index
+>
+>     max_items = max(len(v) for v in leaf_to_items.values())  # padding 宽度
+>
+>     ids   = np.zeros((num_leaves, max_items), dtype=np.int64)
+>     valid = np.zeros((num_leaves, max_items), dtype=bool)
+>     for leaf_idx, items in leaf_to_items.items():
+>         for j, item in enumerate(items):
+>             ids[leaf_idx, j] = item
+>             valid[leaf_idx, j] = True      # 真实 item 标记为 True
+>     return ids, valid
+> ```
+>
+> **为什么需要 valid 矩阵？** 不同叶子关联的 item 数量不同（比如叶子 0 有 2 个，
+> 其他都只有 1 个），但 tensor 必须是规整的矩形，所以用 0 补齐（padding）。
+> `valid` 矩阵记录了哪些位置是真实 item、哪些是 padding，推理时用它来排除补齐项。
 
 **leaf_item_ids** [6, 2] 和 **leaf_item_valid** [6, 2]：
 
@@ -381,6 +568,18 @@ item g: city == "深圳"         ✗ 不匹配
 
 ### 3.2 Phase 1: Targeting Mask
 
+> **对应代码** (`recall.py` → `GenerativeRecall.forward`):
+>
+> ```python
+> # Phase 1: targeting 模块输出每个 item 的分数
+> # 匹配的 item → 0.0，不匹配的 → -inf
+> targeting_scores = self.targeting(pred_satisfied, query)    # [B, N]
+> item_mask = targeting_scores > float("-inf")                # [B, N] bool
+> ```
+>
+> `targeting` 是一个独立的子模块，根据用户属性（城市、年龄等）与 item 定向规则
+> 做匹配。不匹配的 item 直接赋 `-inf`，在后续所有计算中自动被排除。
+
 ```
 targeting_scores = [0.0, 0.0, -inf, 0.0, 0.0, -inf, -inf]
                     a✓   b✓   c✗    d✓   e✓   f✗    g✗
@@ -389,6 +588,38 @@ item_mask = [T, T, F, T, T, F, F]
 ```
 
 ### 3.3 Phase 2: Validity Propagation
+
+> **对应代码** (`trie.py` → `Trie.propagate_validity`):
+>
+> ```python
+> node_valid = torch.zeros(B, self._num_states, dtype=torch.bool, device=device)
+>
+> # ---- 第一步：初始化叶子层 ----
+> # leaf_item_ids[local] 取出每个叶子关联的 item 列表
+> # item_mask[:, leaf_item_ids] → [B, nL, M]
+> items_g = item_mask[:, self.leaf_item_ids]
+> # 只要叶子关联的 item 中有一个是 valid 的（且非 padding），叶子就 valid
+> leaf_v = (items_g & self.leaf_item_valid).any(dim=2)     # [B, nL]
+> node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
+>
+> # ---- 第二步：从倒数第二层到 L0，逐层向上传播 ----
+> for d in range(self._path_length - 2, -1, -1):
+>     states = torch.arange(s_start, s_start + s_count)
+>     starts = self.csr_indptr[states]                      # CSR 起始位置
+>     actual_lens = self.csr_indptr[states + 1] - starts    # 每个 state 的子节点数
+>
+>     # 用 offsets [0, 1, ..., max_br-1] 批量取出子节点
+>     gather_idx = (starts.unsqueeze(1) + offsets.unsqueeze(0)).clamp(max=max_csr)
+>     ch_states = self.packed_csr[gather_idx, 1]            # 子节点 state ID
+>
+>     struct_ok = offsets.unsqueeze(0) < actual_lens.unsqueeze(1)  # 排除 padding
+>     child_v = node_valid[:, ch_states] & struct_ok.unsqueeze(0)
+>     node_valid[:, s_start : s_start + s_count] = child_v.any(dim=2)  # 有一个子 valid 即可
+> ```
+>
+> **逐层传播的核心逻辑**：对于每一层的每个节点，通过 CSR 查出它的所有子节点，
+> 再用 `any(dim=2)` 判断"是否至少有一个子节点 valid"。整个过程是纯 tensor 操作，
+> 没有 Python 循环遍历节点，因此可以高效地在 GPU 上并行执行。
 
 从叶子向上传播。只要子树下有一个 valid item，节点就 valid。
 
@@ -471,6 +702,36 @@ St2063✓ St2064✗ St2065✓ St2066✓ St2067✗ St2068✗
 
 ### 3.4 Phase 3: Beam Search (beam_width=3)
 
+> **对应代码** (`recall.py` → `GenerativeRecall.forward`):
+>
+> Beam Search 的整体框架：
+>
+> ```python
+> # Step 0: 选首 token
+> logits0 = self.decoder(query, dummy)               # decoder 打分
+> lp0 = torch.log_softmax(logits0, dim=-1)           # 转为 log-probability
+>
+> # start_mask: Trie 中存在的首 token；node_valid[:, 1:V+1]: 剪枝后仍有效的
+> l0_valid = node_valid[:, 1 : V + 1]
+> lp0 = lp0.masked_fill(~(self.trie.start_mask & l0_valid), float("-inf"))
+> top_lp, top_tok = lp0.topk(beam, dim=-1)           # 取 beam_width 个最优首 token
+>
+> beam_states = top_tok + 1                           # token → State ID (depth 0 规则)
+> beam_scores = top_lp
+>
+> # Steps 1 ~ L-1: 逐层展开
+> for step in range(1, L):
+>     logits = self.decoder(user_repr, paths_flat)    # decoder 对每个 beam 打分
+>     lp = torch.log_softmax(logits, dim=-1)
+>     if step < d_dense:
+>         ... = self._step_dense(...)                  # 用 Dense 表查子节点
+>     else:
+>         ... = self._step_csr(...)                    # 用 CSR 查子节点
+> ```
+>
+> **`masked_fill` 的作用**：把不在 Trie 中、或被剪枝掉的 token 的分数设为 `-inf`，
+> 这样 `topk` 时这些 token 永远不会被选中——这就是"约束解码"的关键所在。
+
 假设 decoder 的 `log_softmax` 输出如下（简化为只列相关 token 的值）。
 
 #### Step 0: 首 token
@@ -501,6 +762,27 @@ beam_paths  = [[0,0,0,0,0], ...]
 ```
 
 #### Step 1: Dense 步
+
+> **对应代码** (`recall.py` → `GenerativeRecall._step_dense`):
+>
+> ```python
+> parent_tok = (flat_st - 1).long()                      # state ID → token 下标
+> masks = self.trie.dense_mask[parent_tok]               # [B*beam, V] 哪些子 token 存在
+> st_table = self.trie.dense_states[parent_tok]          # [B*beam, V] 对应的 state ID
+>
+> nv = node_valid[bb, st_table]                          # 子节点是否 valid
+> combined = masks & nv                                   # 结构存在 + 剪枝有效
+> lp = lp.masked_fill(~combined, float("-inf"))          # 不合法的设为 -inf
+>
+> cand = beam_scores.unsqueeze(-1) + lp.view(B, beam, V) # 累积分数
+> top_sc, top_flat = cand.view(B, -1).topk(beam)         # 全局 topk
+> top_bm = top_flat // V                                  # 来自哪个 beam
+> top_tk = top_flat % V                                   # 选了哪个 token
+> ```
+>
+> **Dense 步的核心是直接用 parent token 做数组下标**，O(1) 取出所有合法子节点，
+> 然后和 `node_valid` 做交集过滤。`cand.view(B, -1).topk(beam)` 在
+> `beam × V` 个候选中全局取 top-k，实现了 beam 之间的竞争。
 
 只有 beam 0 有效（state=1），查 dense 表：
 
@@ -534,6 +816,33 @@ beam_paths  = [[0,2,0,0,0], [0,1,0,0,0], ...]
 ```
 
 #### Step 2: CSR 步
+
+> **对应代码** (`recall.py` → `GenerativeRecall._step_csr`):
+>
+> ```python
+> starts = self.trie.csr_indptr[flat_st]               # 每个 beam 的 CSR 起始位置
+> a_lens = self.trie.csr_indptr[flat_st + 1] - starts  # 每个 beam 的实际子节点数
+>
+> offs = torch.arange(limit)                             # [0, 1, ..., max_branch-1]
+> gi = (starts.unsqueeze(1) + offs.unsqueeze(0)).clamp(max=...)
+> gathered = self.trie.packed_csr[gi]                    # [B*beam, limit, 2]
+> c_tok = gathered[..., 0]                               # 子节点 token
+> c_st  = gathered[..., 1]                               # 子节点 state ID
+>
+> struct_ok = offs < a_lens.unsqueeze(1)                 # 排除超出实际子节点数的位置
+> c_nv = node_valid[bb, c_st]                           # 子节点是否 valid
+> valid = struct_ok & c_nv
+>
+> c_lp = lp.gather(1, safe_tok).masked_fill(~valid, float("-inf"))
+>
+> cand = beam_scores.unsqueeze(-1) + c_lp.view(B, beam, limit)
+> top_sc, top_flat = cand.view(B, -1).topk(beam)        # 全局 topk
+> ```
+>
+> **CSR 步 vs Dense 步的区别**：Dense 步在 V 维全空间上做 mask，适合前几层
+> （分支少但需要快速查表）；CSR 步只读取每个 state 实际拥有的子节点（`limit` 个），
+> 适合深层（分支稀疏，不需要遍历整个词表）。
+> `struct_ok` 确保不读越界位置，`c_nv` 确保被剪枝的路径不被选中。
 
 d_dense=2，从 step 2 开始用 CSR。max_branch_factor = 2。
 
@@ -606,6 +915,30 @@ topk(3):
 ```
 
 ### 3.5 Phase 4: Resolve Leaves
+
+> **对应代码** (`trie.py` → `Trie.resolve_leaves`):
+>
+> ```python
+> def resolve_leaves(self, leaf_states, scores):
+>     local = (leaf_states - leaf_s).clamp(min=0, max=self.num_leaves - 1)
+>
+>     items = self.leaf_item_ids[local]       # [B, beam] → [B, beam, M] item indices
+>     valid = self.leaf_item_valid[local]     # [B, beam, M] 区分真实 item 和 padding
+>
+>     # 将 beam 分数广播到每个 item 上，padding 位置填 -inf
+>     scores_exp = scores.unsqueeze(-1).expand_as(items)
+>     flat_scores = scores_exp.masked_fill(~valid, float("-inf")).reshape(B, -1)
+>     flat_items = items.reshape(B, -1)
+>
+>     # scatter_reduce: 把分数写入 [B, N] 输出，同一 item 取最大值
+>     output = torch.full((B, self._num_items), float("-inf"))
+>     output.scatter_reduce_(1, flat_items, flat_scores, reduce="amax")
+>     return output
+> ```
+>
+> **关键操作 `scatter_reduce_`**：多个 beam 可能映射到同一个 item（比如两个 beam
+> 走不同路径到达同一个 item），此时取最大分数（`amax`）。
+> 这一步将 beam 空间的结果"散射"回 item 空间，输出 `[B, N]` 的完整打分矩阵。
 
 将 beam 的叶子 state 映射回 item：
 
