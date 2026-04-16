@@ -12,7 +12,7 @@
   --bg-card: #ffffff; --border: #e5ddd5; --border-light: #eee8e2;
   --text-0: #3a3530; --text-1: #7a7168; --text-2: #b0a89f;
   --accent: #a67c52; --accent-bg: rgba(166,124,82,.06);
-  --green: #6b8f6b; --green-bg: rgba(107,143,107,.06);
+  --green: #8a8f68; --green-bg: rgba(138,143,104,.06);
   --red: #b06a60; --red-bg: rgba(176,106,96,.05);
   --yellow: #a08858; --yellow-bg: rgba(160,136,88,.06);
   --purple: #8a7fa0; --purple-bg: rgba(138,127,160,.06);
@@ -41,19 +41,13 @@ body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-hei
 .container{max-width:920px;margin:0 auto;padding:0 40px 80px}
 section{margin-bottom:72px}
 .sec-header{display:flex;align-items:center;gap:14px;margin-bottom:28px}
-.sec-label{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:400;flex-shrink:0;opacity:.65}
+.sec-label{font-family:var(--display);font-size:22px;color:var(--accent);font-weight:300;flex-shrink:0;opacity:.5;line-height:1}
 .sec-dash{width:28px;height:1px;background:var(--accent);opacity:.3;flex-shrink:0}
 h2{font-family:var(--display);font-size:28px;font-weight:400;margin:0;padding:0;border:none;letter-spacing:-.2px;color:var(--text-0)}
 p{color:var(--text-1);font-size:16px;margin-bottom:14px;max-width:700px}
 code{font-family:var(--mono);font-size:.88em;background:var(--bg-2);padding:2px 6px;border-radius:4px}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-
-/* ── Signature Box ── */
-.sig-box{display:inline-block;background:var(--bg-1);border:1px solid var(--border-light);border-radius:8px;padding:10px 20px;font-family:var(--mono);font-size:13px;color:var(--text-1);margin:8px 0 20px}
-.sig-box .kw{color:var(--purple)}
-.sig-box .fn{color:var(--accent);font-weight:600}
-.sig-box .ty{color:var(--green)}
 
 /* ── Architecture SVG ── */
 .arch-svg{width:100%;max-width:720px;display:block;margin:24px auto 0}
@@ -75,19 +69,6 @@ a:hover{text-decoration:underline}
 .ml-links a{font-size:13px;color:var(--accent);font-weight:500}
 .ml-links .star{color:var(--yellow)}
 .ml-links .muted{font-size:13px;color:var(--text-2)}
-
-/* ── Composition ── */
-.combo-list{display:flex;flex-direction:column;gap:12px;margin:24px 0}
-.combo{padding:18px 22px;border:1px solid var(--border-light);border-radius:10px;background:var(--bg-1)}
-.combo-label{font-size:12px;color:var(--text-2);margin-bottom:10px;font-weight:500;letter-spacing:.2px}
-.combo-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.cn{padding:4px 12px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid var(--border-light);background:var(--bg-1);color:var(--text-1)}
-.cn.op{border-color:var(--accent);color:var(--accent);font-weight:600}
-.cn.m-t{color:var(--yellow)}
-.cn.m-k{color:var(--green)}
-.cn.m-g{color:var(--red)}
-.ca{color:var(--text-2);font-size:14px;user-select:none}
-.ca-sm{font-size:10px;color:var(--text-2);padding:0 1px}
 
 /* ── Quick Start ── */
 .code-block{font-family:var(--mono);font-size:13px;color:var(--text-1);line-height:2;padding:22px 26px;background:var(--bg-1);border:1px solid var(--border-light);border-radius:10px;margin:16px 0;overflow-x:auto;white-space:pre}
@@ -133,11 +114,6 @@ a:hover{text-decoration:underline}
   </div>
   <p>所有召回方法继承 <code>RecallOp(nn.Module)</code>，共享统一的 <code>forward</code> 签名。
     通过 <code>And</code>（交集 / 分数求和）与 <code>Or</code>（并集 / 分数取 max）声明式组合为 Pipeline，编译导出为单一 <code>.pt2</code> 模型包。</p>
-  <div class="sig-box">
-    <span class="kw">class</span> <span class="fn">RecallOp</span>(nn.Module):<br>
-    &nbsp;&nbsp;<span class="kw">def</span> <span class="fn">forward</span>(self, pred: <span class="ty">Tensor[B,P]</span>, query: <span class="ty">Tensor[B,D]</span>) → <span class="ty">Tensor[B,N]</span>
-  </div>
-
   <svg class="arch-svg" viewBox="0 0 720 396" fill="none">
     <!-- Pipeline dashed box -->
     <rect x="18" y="10" width="684" height="266" rx="12" fill="none" stroke="var(--border)" stroke-width="1.2" stroke-dasharray="6 4"/>
@@ -253,50 +229,10 @@ a:hover{text-decoration:underline}
   </div>
 </section>
 
-<!-- ── 03 组合 ── -->
-<section id="compose">
-  <div class="sec-header">
-    <span class="sec-label">03</span>
-    <span class="sec-dash"></span>
-    <h2>声明式组合</h2>
-  </div>
-  <p>通过 <code>And</code>（交集 / 分数求和）与 <code>Or</code>（并集 / 分数取 max）组合任意召回方法，
-    支持嵌套，编译为单一 <code>.pt2</code> 模型。</p>
-
-  <div class="combo-list">
-    <div class="combo">
-      <div class="combo-label">定向过滤 + 语义排序</div>
-      <div class="combo-flow">
-        <span class="cn op">And</span><span class="ca">(</span>
-        <span class="cn m-t">Targeting</span><span class="ca">,</span>
-        <span class="cn m-k">KNN</span><span class="ca">)</span>
-      </div>
-    </div>
-    <div class="combo">
-      <div class="combo-label">多路向量检索取并集</div>
-      <div class="combo-flow">
-        <span class="cn op">Or</span><span class="ca">(</span>
-        <span class="cn m-k">KNN</span><span class="ca-sm">cosine</span><span class="ca">,</span>
-        <span class="cn m-k">KNN</span><span class="ca-sm">l2</span><span class="ca">)</span>
-      </div>
-    </div>
-    <div class="combo">
-      <div class="combo-label">复杂嵌套 — 多路召回 + 生成式</div>
-      <div class="combo-flow">
-        <span class="cn op">Or</span><span class="ca">(</span>
-        <span class="cn op" style="font-size:12px">And</span><span class="ca">(</span><span class="cn m-t">Targeting</span><span class="ca">,</span>
-        <span class="cn m-k">KNN</span><span class="ca-sm">cosine</span><span class="ca">)</span><span class="ca">,</span>
-        <span class="cn op" style="font-size:12px">And</span><span class="ca">(</span><span class="cn m-t">Targeting</span><span class="ca">,</span>
-        <span class="cn m-g">Generative</span><span class="ca">)</span><span class="ca">)</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── 04 快速开始 ── -->
+<!-- ── 03 快速开始 ── -->
 <section id="quickstart">
   <div class="sec-header">
-    <span class="sec-label">04</span>
+    <span class="sec-label">03</span>
     <span class="sec-dash"></span>
     <h2>快速开始</h2>
   </div>

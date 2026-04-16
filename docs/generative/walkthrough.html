@@ -12,7 +12,7 @@
   --bg-card: #ffffff; --border: #e5ddd5; --border-light: #eee8e2;
   --text-0: #3a3530; --text-1: #7a7168; --text-2: #b0a89f;
   --accent: #a67c52; --accent-bg: rgba(166,124,82,.06);
-  --green: #6b8f6b; --green-bg: rgba(107,143,107,.06);
+  --green: #8a8f68; --green-bg: rgba(138,143,104,.06);
   --red: #b06a60; --red-bg: rgba(176,106,96,.05);
   --yellow: #a08858; --yellow-bg: rgba(160,136,88,.06);
   --purple: #8a7fa0; --purple-bg: rgba(138,127,160,.06);
@@ -129,7 +129,7 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .dc{width:70px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:10px;font-family:var(--mono);border:1px solid var(--border-light);transition:all .2s;cursor:default;position:relative}
 .dc.empty{background:var(--bg-1);color:var(--text-2)}
 .dc.hit{background:var(--green-bg);border-color:var(--green);color:var(--green);font-weight:700;cursor:pointer}
-.dc.hit:hover{transform:scale(1.06);box-shadow:0 0 12px rgba(107,143,107,.2)}
+.dc.hit:hover{transform:scale(1.06);box-shadow:0 0 12px rgba(138,143,104,.2)}
 .dc.hdr{background:none;border:none;color:var(--text-2);font-weight:600;font-size:10px}
 .dense-tooltip{font-size:12px;color:var(--text-1);margin-top:6px;min-height:18px}
 
@@ -199,7 +199,7 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .pp{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600}
 .pp.p2{background:rgba(176,106,96,.12);color:#b06a60}
 .pp.p3{background:rgba(166,124,82,.1);color:#a67c52}
-.pp.p4{background:rgba(107,143,107,.12);color:#6b8f6b}
+.pp.p4{background:rgba(138,143,104,.12);color:#8a8f68}
 .tc .tc-usage{font-size:12px;background:var(--bg-2);border-radius:4px;padding:8px 10px;line-height:1.7}
 .tc .tc-usage code{font-size:11px;color:var(--accent)}
 .tc .tc-usage .uline{color:var(--text-1);margin:2px 0}
@@ -817,8 +817,8 @@ function applyView() {
 
     if (currentMode === 'pruned' || currentMode === 'beam') {
       if (n.valid) {
-        stroke = n.leaf ? '#6b8f6b' : '#a67c52';
-        fill = n.leaf ? 'rgba(107,143,107,.08)' : 'rgba(166,124,82,.08)';
+        stroke = n.leaf ? '#8a8f68' : '#a67c52';
+        fill = n.leaf ? 'rgba(138,143,104,.08)' : 'rgba(166,124,82,.08)';
       } else {
         op = .2; stroke = '#e5ddd5'; fill = '#f2eeea';
         t1c = '#b0a89f'; t2c = '#b0a89f';
@@ -1303,12 +1303,12 @@ function updateVPTrie(computed, activeLayerIdx) {
 
     if (isComputed) {
       if (valid) {
-        el.rect.setAttribute('fill', isActive ? 'rgba(107,143,107,.15)' : 'rgba(107,143,107,.08)');
-        el.rect.setAttribute('stroke', '#6b8f6b');
+        el.rect.setAttribute('fill', isActive ? 'rgba(138,143,104,.15)' : 'rgba(138,143,104,.08)');
+        el.rect.setAttribute('stroke', '#8a8f68');
         el.rect.setAttribute('stroke-width', isActive ? '2' : '1.5');
-        el.indicator.setAttribute('fill', '#6b8f6b');
+        el.indicator.setAttribute('fill', '#8a8f68');
         el.t1.setAttribute('fill', '#3a3530');
-        el.t2.setAttribute('fill', '#6b8f6b');
+        el.t2.setAttribute('fill', '#8a8f68');
       } else {
         el.rect.setAttribute('fill', 'rgba(176,106,96,.06)');
         el.rect.setAttribute('stroke', '#b06a60');
@@ -1333,7 +1333,7 @@ function updateVPTrie(computed, activeLayerIdx) {
     if (fc && tc) {
       const fv = vpValidResult[from], tv = vpValidResult[to];
       if (fv && tv) {
-        p.setAttribute('stroke', '#6b8f6b'); p.style.opacity = '.7';
+        p.setAttribute('stroke', '#8a8f68'); p.style.opacity = '.7';
         p.setAttribute('stroke-width', '2'); p.setAttribute('stroke-dasharray', '');
       } else {
         p.setAttribute('stroke', '#b06a60'); p.style.opacity = '.2';
@@ -1341,7 +1341,7 @@ function updateVPTrie(computed, activeLayerIdx) {
       }
     } else if (tc) {
       const tv = vpValidResult[to];
-      p.setAttribute('stroke', tv ? '#6b8f6b' : '#b06a60'); p.style.opacity = '.35';
+      p.setAttribute('stroke', tv ? '#8a8f68' : '#b06a60'); p.style.opacity = '.35';
       p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-dasharray', '');
     } else {
       p.setAttribute('stroke', '#e5ddd5'); p.style.opacity = '.6';
