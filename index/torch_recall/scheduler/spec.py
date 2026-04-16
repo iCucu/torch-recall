@@ -33,6 +33,28 @@ class KNN(RecallSpec):
         self.weight = weight
 
 
+class Generative(RecallSpec):
+    """Leaf: generative (trie-constrained beam search) recall.
+
+    Internally handles targeting for trie pruning. The decoder is an
+    external nn.Module with signature::
+
+        forward(user_repr [B*beam, D], partial_paths [B*beam, 5]) -> [B*beam, V] logits
+    """
+
+    def __init__(
+        self,
+        schema: Schema,
+        decoder: "torch.nn.Module",
+        beam_width: int = 10,
+        dense_levels: int = 2,
+    ):
+        self.schema = schema
+        self.decoder = decoder
+        self.beam_width = beam_width
+        self.dense_levels = dense_levels
+
+
 class And(RecallSpec):
     """Combiner: intersection — ``score = sum(children)``.
 

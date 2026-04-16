@@ -53,6 +53,7 @@ class Item:
     id: str | None = None
     targeting_rule: str | None = None
     embedding: list[float] | None = None
+    sid_path: list[int] | None = None
 
 
 # DNF expansion safety limit (prevents combinatorial explosion during parsing)

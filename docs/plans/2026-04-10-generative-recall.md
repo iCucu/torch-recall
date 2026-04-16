@@ -17,60 +17,68 @@
 
 **文件**: `index/torch_recall/recall_method/generative/trie.py`（新建）
 
-### 2a. DenseTrieLevel
+### Trie — Dense/CSR 混合 nn.Module
+
+采用全局 State ID 体系，无 `DenseTrieLevel`/`SparseTrieLevel` 子模块。所有状态（节点）按层连续编号，统一存储。
 
 ```python
-class DenseTrieLevel(nn.Module):
-    """Trie level with dense [num_nodes, V] representation."""
-    buffers:
-        valid:          [num_nodes, V] bool
-        child_id:       [num_nodes, V] int64
-        prop_children:  [num_nodes, max_ch] int64
-        prop_mask:      [num_nodes, max_ch] bool
+class Trie(nn.Module):
+    """Dense/CSR hybrid trie with global state IDs."""
 
-    methods:
-        get_children(node_ids [B, beam]) -> (valid [B, beam, V], child_ids [B, beam, V])
-        propagate(child_valid [B, num_children]) -> [B, num_nodes] bool
+    # ---- registered buffers ----
+    start_mask:     [V] bool               # 合法首 token
+    dense_mask:     [V, V] bool            # d_dense=2 的密集查表
+    dense_states:   [V, V] int64           # d_dense=2 的 state 查表
+    packed_csr:     [E + V, 2] int64       # CSR 全量边 [token, next_state]
+    csr_indptr:     [num_states + 2] int64 # CSR 行指针
+    leaf_item_ids:  [num_leaves, max_items_per_leaf] int64
+    leaf_item_valid:[num_leaves, max_items_per_leaf] bool
+
+    # ---- metadata (Python scalars / lists) ----
+    level_start:   list[int]       # 每层起始 state ID
+    level_count:   list[int]       # 每层节点数
+    max_branch_factors: list[int]  # 每层最大分支因子
+    num_items, num_states, d_dense, path_length, vocab_size
+
+    # ---- methods ----
+    propagate_validity(item_mask [B, N]) -> node_valid [B, num_states] bool
+    resolve_leaves(beam_states [B, beam], scores [B, beam]) -> [B, N] float
 ```
 
-### 2b. SparseTrieLevel
+#### State ID 分配
+
+```
+State 0       — 占位符（padding / OOB）
+State 1..V    — L0 节点 (state = first_token + 1)
+State V+1..   — L1, L2, … 节点
+最后一段       — 叶子节点 (depth L-1)
+```
+
+#### CSR 格式
 
 ```python
-class SparseTrieLevel(nn.Module):
-    """Trie level with padded sparse representation."""
-    buffers:
-        children_sid:   [num_nodes, max_ch] int64
-        children_node:  [num_nodes, max_ch] int64
-        children_valid: [num_nodes, max_ch] bool
-
-    methods:
-        get_children(node_ids [B, beam]) -> (sids [B, beam, max_ch], nodes [B, beam, max_ch], valid [B, beam, max_ch])
-        propagate(child_valid [B, num_children]) -> [B, num_nodes] bool
+# packed_csr[indptr[s] : indptr[s+1]] 为 state s 的所有子 (token, child_state) 对
+# 末尾 V 行 OOB 填充 → gather 越界安全
 ```
 
-注意: `propagate` 复用 `prop_children` / `prop_mask` buffers（与 SparseTrieLevel 的 children buffers 形状一致，直接复用）。
+#### 向上传播 (propagate_validity)
 
-### 2c. HybridTrie
+利用 CSR burst-read，从叶子逐层向上聚合子节点有效性。每步：
+`node_valid[:, parent_states] = (node_valid[:, child_states] & struct_mask).any(dim=-1)`
 
-```python
-class HybridTrie(nn.Module):
-    levels: nn.ModuleList          # [DenseTrieLevel, DenseTrieLevel, SparseTrieLevel, ...]
-    leaf_item_ids:   [num_leaves, max_items_per_leaf] int64
-    leaf_item_valid: [num_leaves, max_items_per_leaf] bool
-    num_nodes_per_level: list[int]
+#### resolve_leaves
 
-    methods:
-        propagate_validity(item_mask [B, N]) -> list[Tensor]  # node_valid per level
-        resolve_leaves(leaf_nodes [B, beam], scores [B, beam]) -> [B, N] float
-```
+beam 叶子 state → leaf_item_ids 映射 → scatter_reduce(amax) 到 `[B, N]`。
 
-**验证**: 单测用小型 trie（5 items, 3 unique paths），验证节点结构和传播正确性。
+**验证**: 单测用小型 trie（5 items, 3 unique paths），验证 CSR 结构、state ID 和传播正确性。
 
 ---
 
 ## Step 3: Trie Builder
 
 **文件**: `index/torch_recall/recall_method/generative/builder.py`（新建）
+
+采用纯 NumPy 向量化构建（参考 STATIC 的 `build_static_index`）：
 
 ```python
 class GenerativeBuilder:
@@ -79,22 +87,22 @@ class GenerativeBuilder:
 
     def build(self, items) -> (GenerativeRecall, meta):
         1. 校验: 每个 item 必须有 sid_path, len == path_length, 值 ∈ [0, vocab_size)
-        2. 校验: 有 targeting_rule 的 item 才参与 targeting 构建
-        3. 调用 TargetingBuilder(schema).build(items) → targeting_model, targeting_meta
-        4. 从 items 提取 sid_paths，构建 trie:
-           a. 收集每层的 unique prefixes → 分配 node ids
-           b. 前 dense_levels 层: 构建 [num_nodes, V] valid/child_id tensors
-           c. 后续 sparse 层: 构建 padded children tensors
-           d. 叶子层: 构建 leaf→item 映射
-           e. 每层构建 propagation buffers (padded children lists)
-        5. 组装 HybridTrie
+        2. 调用 TargetingBuilder(schema).build(items) → targeting_model, targeting_meta
+        3. _build_static_index(sorted_sids, V, d_dense):
+           a. np.lexsort → 字典序排序
+           b. diff-scan → 识别每层新前缀
+           c. cumulative 分配全局 State ID
+           d. 收集所有 (parent, token, child) 边
+           e. np.bincount + np.cumsum → CSR 压缩
+           f. 合成 dense_mask, dense_states, start_mask
+           g. 计算 max_branch_factors
+        4. _build_leaf_mapping: leaf state → item index
+        5. 组装 Trie
         6. 构建 GenerativeRecall(targeting, trie, decoder, ...)
         7. 返回 (model, meta)
-
-    def save_meta(self, meta, path): ...
 ```
 
-**验证**: 构建后检查 trie 节点数、层数、leaf 映射。
+**验证**: 构建后检查 num_states, CSR indptr shape, leaf mapping。
 
 ---
 
@@ -108,7 +116,6 @@ class MockDecoder(nn.Module):
         self.proj = nn.Linear(user_dim, vocab_size)
 
     def forward(self, user_repr, partial_paths):
-        # user_repr: [B*beam, D], partial_paths: [B*beam, 5]
         return self.proj(user_repr)  # [B*beam, 2048]
 ```
 
@@ -122,53 +129,26 @@ class MockDecoder(nn.Module):
 
 ```python
 class GenerativeRecall(RecallOp):
-    def __init__(self, targeting, trie, decoder, beam_width, num_items, num_preds, user_dim):
+    def __init__(self, targeting, trie, decoder, beam_width, num_items,
+                 num_preds, user_dim, query_offset):
         self.targeting = targeting      # TargetingRecall
-        self.trie = trie                # HybridTrie
+        self.trie = trie                # Trie
         self.decoder = decoder          # nn.Module
-        self.beam_width = beam_width
-        self.num_items = num_items
-        self.num_preds = num_preds
-        self.user_dim = user_dim
+        # ...
 
     def forward(self, pred_satisfied, query):
-        # Phase 1: targeting mask
-        targeting_scores = self.targeting(pred_satisfied, query)
-        item_mask = targeting_scores > float("-inf")
+        user_repr = query[:, query_offset : query_offset + user_dim]
 
-        # Phase 2: trie validity propagation
-        node_valid_per_level = self.trie.propagate_validity(item_mask)
-
-        # Phase 3: beam search (5 steps, unrolled)
-        B = pred_satisfied.shape[0]
-        beam_nodes = zeros(B, beam_width)  # all start at root (node 0)
-        beam_scores = zeros(B, beam_width)
-        beam_paths = zeros(B, beam_width, 5)
-
-        for step in range(5):
-            level = self.trie.levels[step]
-            node_valid_next = node_valid_per_level[step + 1] if step < 4 else leaf_valid
-
-            if isinstance(level, DenseTrieLevel):
-                # dense beam step
-                ...
-            else:
-                # sparse beam step
-                ...
-
-            # topk → update beam_nodes, beam_scores, beam_paths
-
-        # Phase 4: resolve to [B, N]
-        return self.trie.resolve_leaves(beam_nodes, beam_scores, self.num_items)
-
-    def example_inputs(self, device="cpu"):
-        return (
-            zeros(1, self.num_preds, dtype=torch.bool, device=device),
-            randn(1, self.user_dim, device=device),
-        )
+        # Phase 1: targeting → item_mask
+        # Phase 2: trie.propagate_validity(item_mask) → node_valid [B, S]
+        # Phase 3: beam search
+        #   Step 0: start_mask + node_valid → 首 token topk
+        #   Step 1..d_dense-1: _step_dense (dense_mask/dense_states lookup)
+        #   Step d_dense..L-1: _step_csr (CSR burst-read)
+        #   Decoder logits 经 log_softmax 后 mask
+        #   beam 更新用 _gather_beams
+        # Phase 4: trie.resolve_leaves → [B, N]
 ```
-
-注意: `for step in range(5)` 中 `isinstance` 检查在 tracing 时是静态的（ModuleList 中每个元素类型已知），`torch.export` 兼容。
 
 **验证**: 小数据 E2E forward，检查输出 shape `[B, N]`，合法 item 有限分数。
 
@@ -195,8 +175,7 @@ class Generative(RecallSpec):
 
 - `_collect_leaves` 增加 `generative_leaves` 收集
 - `build()` 中遇到 `Generative` 叶子时调用 `GenerativeBuilder.build(items)`
-- `_compile` 中返回构建好的 `GenerativeRecall` 模块
-- `total_query_dim` 加上 `user_dim`（decoder 的输入维度需要在 Generative spec 中指定）
+- `total_query_dim` 加上 `user_dim`，通过 `query_offset` 切片
 
 ### 6c. Encoder 扩展
 
@@ -230,14 +209,12 @@ ITEMS = [
 
 ### 测试用例
 
-1. **TestTrieBuilder**: trie 构建正确性（节点数、边数、leaf mapping）
-2. **TestTriePropagate**: 给定 item_mask，node_valid 正确传播
-3. **TestBeamSearch**: MockDecoder + 小 trie → beam 输出都是合法 sid path
-4. **TestForwardShape**: `forward()` 输出 `[B, N]`，分数范围正确
-5. **TestTargetingMask**: 被 targeting 过滤的 item 分数为 -inf
-6. **TestBatch**: B=3 batch 结果与逐条一致
-7. **TestExport**: `export_recall_model` 成功导出 `.pt2`
-8. **TestPipelineIntegration**: `Or(Generative(...), KNN(...))` 组合正确工作
+1. **TestBuilder**: Trie 构建正确性（num_states, CSR indptr, dense_mask, leaf mapping）
+2. **TestForward**: 用 MockDecoder + 小 trie → forward 输出 `[B, N]` shape，分数有限
+3. **TestTargetingMask**: 被 targeting 过滤的 item 分数为 -inf
+4. **TestBatch**: B=3 batch 结果正确
+5. **TestPipelineGenerativeOnly**: 独立 `Generative` pipeline 正确工作
+6. **TestPipelineOrGenerativeKNN**: `Or(Generative, KNN)` 组合正确工作
 
 ---
 
@@ -245,7 +222,7 @@ ITEMS = [
 
 **文件**: `examples/05_generative_recall.py`（新建）
 
-完整示例：构建 Generative pipeline → 查询 → 导出。
+完整示例：构建 Generative pipeline → Trie 结构概览 → 查询 → 打印结果。
 
 ---
 
@@ -264,5 +241,3 @@ Step 6 (spec + pipeline integration)
     ↓
 Step 7 (tests) + Step 8 (example)           ← 可并行
 ```
-
-预计工作量: 每 step 约 1 个 commit，总共 ~8 commits。

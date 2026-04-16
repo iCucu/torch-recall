@@ -10,6 +10,7 @@ from torch_recall.scheduler.spec import (
     RecallSpec,
     Targeting as TargetingSpec,
     KNN as KNNSpec,
+    Generative as GenerativeSpec,
     And as AndSpec,
     Or as OrSpec,
 )
@@ -26,15 +27,19 @@ def _collect_leaves(
     spec: RecallSpec,
     targeting: list[TargetingSpec],
     knn: list[KNNSpec],
+    generative: list[GenerativeSpec] | None = None,
 ) -> None:
     """DFS to collect all leaf specs (in tree-walk order)."""
     if isinstance(spec, TargetingSpec):
         targeting.append(spec)
     elif isinstance(spec, KNNSpec):
         knn.append(spec)
+    elif isinstance(spec, GenerativeSpec):
+        if generative is not None:
+            generative.append(spec)
     elif isinstance(spec, (AndSpec, OrSpec)):
         for child in spec.children:
-            _collect_leaves(child, targeting, knn)
+            _collect_leaves(child, targeting, knn, generative)
     else:
         raise TypeError(f"Unknown spec node: {type(spec)}")
 
@@ -61,7 +66,8 @@ class PipelineBuilder:
         # --- 1. collect leaves ---
         targeting_leaves: list[TargetingSpec] = []
         knn_leaves: list[KNNSpec] = []
-        _collect_leaves(self.spec, targeting_leaves, knn_leaves)
+        generative_leaves: list[GenerativeSpec] = []
+        _collect_leaves(self.spec, targeting_leaves, knn_leaves, generative_leaves)
 
         # --- 2. build shared targeting model (if any) ---
         targeting_model = None
@@ -81,6 +87,7 @@ class PipelineBuilder:
             targeting_model, targeting_meta = builder.build(items)
 
         num_preds = targeting_meta["num_preds"] if targeting_meta else 1
+        _num_preds_from_gen: int | None = None
 
         # --- 3. build KNN models + assign query offsets ---
         knn_models: list[tuple[KNNSpec, RecallOp]] = []
@@ -104,10 +111,39 @@ class PipelineBuilder:
             })
             offset += dim
 
-        total_query_dim = offset if offset > 0 else 1
+        total_query_dim = offset if offset > 0 else 0
+
+        # --- 3b. build Generative models ---
+        from torch_recall.recall_method.generative.builder import GenerativeBuilder
+
+        gen_models: list[tuple[GenerativeSpec, RecallOp]] = []
+        gen_meta_list: list[dict] = []
+        for spec_node in generative_leaves:
+            gen_builder = GenerativeBuilder(
+                schema=spec_node.schema,
+                decoder=spec_node.decoder,
+                beam_width=spec_node.beam_width,
+                dense_levels=spec_node.dense_levels,
+            )
+            gen_model, gen_meta = gen_builder.build(items)
+            user_dim = gen_meta["user_dim"]
+            gen_model.query_offset = total_query_dim
+            gen_meta["query_offset"] = total_query_dim
+            gen_models.append((spec_node, gen_model))
+            gen_meta_list.append(gen_meta)
+            total_query_dim += user_dim
+            if _num_preds_from_gen is None:
+                _num_preds_from_gen = gen_meta["num_preds"]
+
+        if targeting_meta is None and _num_preds_from_gen is not None:
+            num_preds = _num_preds_from_gen
+
+        if total_query_dim == 0:
+            total_query_dim = 1
 
         # --- 4. recursively compile the spec tree into RecallOps ---
         knn_iter = iter(knn_models)
+        gen_iter = iter(gen_models)
 
         def _compile(node: RecallSpec) -> RecallOp:
             if isinstance(node, TargetingSpec):
@@ -115,6 +151,9 @@ class PipelineBuilder:
                 return targeting_model
             if isinstance(node, KNNSpec):
                 _, model = next(knn_iter)
+                return model
+            if isinstance(node, GenerativeSpec):
+                _, model = next(gen_iter)
                 return model
             if isinstance(node, AndSpec):
                 return AndModule([_compile(c) for c in node.children])
@@ -148,6 +187,8 @@ class PipelineBuilder:
             meta["targeting"] = targeting_meta
         if knn_meta_list:
             meta["knn_leaves"] = knn_meta_list
+        if gen_meta_list:
+            meta["generative_leaves"] = gen_meta_list
 
         return pipeline, meta
 

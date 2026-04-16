@@ -17,6 +17,11 @@ from torch_recall.recall_method.knn.recall import KNNRecall
 from torch_recall.recall_method.knn.builder import KNNBuilder
 from torch_recall.recall_method.knn.encoder import encode_query
 
+# Generative recall
+from torch_recall.recall_method.generative.recall import GenerativeRecall
+from torch_recall.recall_method.generative.builder import GenerativeBuilder
+from torch_recall.recall_method.generative.decoder import MockDecoder
+
 # Pipeline (declarative composition)
 from torch_recall.scheduler.pipeline import RecallPipeline
 from torch_recall.scheduler.pipeline_builder import PipelineBuilder

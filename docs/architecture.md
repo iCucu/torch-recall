@@ -19,8 +19,13 @@ torch-recall 是基于 PyTorch 的召回框架。每种召回方法实现为统�
 │    Pipeline     topk 输出    │    │    KNNBuilder               │
 │    exporter     .pt2 导出    │    │    encode_query             │
 │                              │    ├─────────────────────────────┤
-│  inference/           │    │  ann/ (planned)             │
-│    通用 C++ 推理引擎          │    │    ANNRecall                │
+│  inference/           │    │  generative/                │
+│    通用 C++ 推理引擎          │    │    GenerativeRecall          │
+│                              │    │    GenerativeBuilder         │
+│                              │    │    Trie (Dense/CSR hybrid)   │
+│                              │    ├─────────────────────────────┤
+│                              │    │  ann/ (planned)             │
+│                              │    │    ANNRecall                │
 └─────────────────────────────┘    └─────────────────────────────┘
 ```
 
@@ -41,6 +46,7 @@ class RecallOp(nn.Module):
 |------|---------|-----------|
 | **TargetingRecall** | `0.0` (匹配) / `-inf` (不匹配) | `pred_satisfied` |
 | **KNNRecall** | 相似度分数 (越高越相关) | `query` 的对应切片 |
+| **GenerativeRecall** | 累积 log-probability (beam search) | `pred_satisfied` + `query` 切片 |
 | **AndModule** | `sum(children)` — `-inf` 传染，实现交集 | 透传给子节点 |
 | **OrModule** | `max(children)` — 任一匹配即包含 | 透传给子节点 |
 
@@ -85,7 +91,24 @@ class RecallOp(nn.Module):
 
 **支持的距离度量**: `inner_product`, `cosine`, `l2`
 
-### 3.3 ANN — 近似近邻召回 (planned)
+### 3.3 Generative — 生成式召回
+
+**场景**: 复杂用户-item 交互建模。通过自回归 decoder 在语义 ID 空间中"生成"item。
+
+**核心**: 每个 item 编码为长度 5 的 sid_path（语义 ID 路径）。离线构建 Dense/CSR 混合 Trie，在线通过 Trie 约束的 Beam Search 选出 top-K 路径，再反解为 item。内置 Targeting mask 的向上传播，确保 beam 只走有效路径。
+
+**输入/输出**:
+- 输入: `pred_satisfied [B, P] bool`（targeting 过滤）+ `query [B, D] float` 中的用户表征切片
+- 输出: `[B, N] float` — 累积 log-probability 分数
+
+**关键组件**:
+- `Trie`：Dense/CSR 混合前缀树，全局 State ID，支持在线 propagation
+- `GenerativeBuilder`：向量化 NumPy 构建（参考 STATIC）
+- 外部 `Decoder`：自回归 `nn.Module`，本项目提供 `MockDecoder` 用于测试
+
+详见 [generative/README.md](generative/README.md)。
+
+### 3.4 ANN — 近似近邻召回 (planned)
 
 **场景**: 大规模向量检索。在精度可接受的范围内加速 KNN。
 
@@ -107,14 +130,14 @@ pipeline, meta = builder.build(items)
 
 ### Spec 树（纯数据）
 
-`Targeting`, `KNN`, `And`, `Or` 是纯数据节点，描述组合关系:
+`Targeting`, `KNN`, `Generative`, `And`, `Or` 是纯数据节点，描述组合关系:
 
 ```
-And
-├── Targeting(schema)
-└── Or
-    ├── KNN("cosine")
-    └── KNN("l2")
+Or
+├── Generative(schema, decoder, beam_width=10)
+└── And
+    ├── Targeting(schema)
+    └── KNN("cosine")
 ```
 
 ### 编译为 nn.Module 树
@@ -165,9 +188,10 @@ class Item:
     id: str | None = None
     targeting_rule: str | None = None
     embedding: list[float] | None = None
+    sid_path: list[int] | None = None
 ```
 
-`Item` 是所有召回方法共享的输入格式。每个 item 只需填充它参与的召回方法所需的字段。
+`Item` 是所有召回方法共享的输入格式。每个 item 只需填充它参与的召回方法所需的字段（targeting_rule 用于 Targeting/Generative，embedding 用于 KNN，sid_path 用于 Generative）。
 
 ### 5.2 查询解析管线
 
@@ -192,7 +216,7 @@ def export_recall_model(model, output_path):
     torch._inductor.aoti_compile_and_package(exported, package_path=output_path)
 ```
 
-通用导出函数，接受任何实现了 `example_inputs()` 的 `nn.Module`。单独的 `TargetingRecall`、`KNNRecall`、组合后的 `RecallPipeline` 都可以导出。
+通用导出函数，接受任何实现了 `example_inputs()` 的 `nn.Module`。单独的 `TargetingRecall`、`KNNRecall`、`GenerativeRecall`、组合后的 `RecallPipeline` 都可以导出。
 
 ### 5.4 C++ 推理引擎
 
@@ -233,12 +257,17 @@ torch-recall/
 │       │   │   ├── recall.py            TargetingRecall(RecallOp)
 │       │   │   ├── builder.py           TargetingBuilder
 │       │   │   └── encoder.py           encode_user
-│       │   └── knn/                     K 近邻召回
-│       │       ├── recall.py            KNNRecall(RecallOp)
-│       │       ├── builder.py           KNNBuilder
-│       │       └── encoder.py           encode_query
+│       │   ├── knn/                     K 近邻召回
+│       │   │   ├── recall.py            KNNRecall(RecallOp)
+│       │   │   ├── builder.py           KNNBuilder
+│       │   │   └── encoder.py           encode_query
+│       │   └── generative/              生成式召回
+│       │       ├── recall.py            GenerativeRecall(RecallOp)
+│       │       ├── builder.py           GenerativeBuilder
+│       │       ├── trie.py              Trie (Dense/CSR hybrid)
+│       │       └── decoder.py           MockDecoder
 │       ├── scheduler/
-│       │   ├── spec.py                  Targeting, KNN, And, Or 声明式 spec
+│       │   ├── spec.py                  Targeting, KNN, Generative, And, Or spec
 │       │   ├── pipeline.py              AndModule, OrModule, RecallPipeline
 │       │   ├── pipeline_builder.py      PipelineBuilder: spec → nn.Module
 │       │   ├── encoder.py               encode_pipeline_inputs
@@ -249,7 +278,8 @@ torch-recall/
 ├── examples/                            端到端演示
 └── docs/
     ├── architecture.md                  ← 本文档
-    └── targeting/                       定向召回文档
+    ├── targeting/                       定向召回文档
+    └── generative/                      生成式召回文档
 ```
 
 新增召回方法时:
