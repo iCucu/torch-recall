@@ -25,7 +25,7 @@ body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-hei
 
 /* ── Nav ── */
 .top-nav{grid-column:1/-1;position:sticky;top:0;z-index:100;display:flex;align-items:center;padding:0 24px;gap:16px;background:rgba(248,246,243,.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-light)}
-.top-nav h1{font-size:17px;font-weight:600;white-space:nowrap}
+.top-nav h1{font-size:22px;font-weight:600;white-space:nowrap}
 .top-nav .tags{display:flex;gap:8px;margin-left:auto}
 .top-nav .tag{font-size:12px;padding:2px 10px;border-radius:99px;font-weight:500;border:1px solid}
 .top-nav .tag.py{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -106,11 +106,6 @@ td.mono{font-family:var(--mono);font-size:12px}
 .code-block .fn{color:var(--purple)}
 .code-block .str{color:var(--green)}
 
-/* ── Arch SVG ── */
-.arch-wrap{overflow-x:auto;margin:16px 0;padding:8px 0}
-.arch-wrap svg text{font-family:'Inter',-apple-system,sans-serif}
-.arch-wrap svg text.mono{font-family:'JetBrains Mono','SF Mono','Fira Code',monospace}
-
 /* ── Combo Demo ── */
 .combo-tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}
 .combo-tab{font-size:13px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;transition:all .15s;font-family:var(--font)}
@@ -159,7 +154,6 @@ td.mono{font-family:var(--mono);font-size:12px}
   <a href="#method-knn" class="sub">KNN</a>
   <a href="#method-generative" class="sub">Generative</a>
   <div class="sep"></div>
-  <a href="#architecture">架构总览</a>
   <a href="#combo">组合示例</a>
   <a href="#quickstart">快速开始</a>
   <a href="#docs">文档索引</a>
@@ -344,109 +338,6 @@ td.mono{font-family:var(--mono);font-size:12px}
       <td class="mono">max(children) → [B, N]</td>
       <td>取最大</td>
       <td>任一子节点匹配即包含</td>
-    </tr>
-  </table></div>
-</section>
-
-<!-- ── 架构总览 ── -->
-<section id="architecture">
-  <h2>架构总览</h2>
-  <p>Builder → RecallOp → Encoder 三层分离。Builder 离线构建索引，RecallOp 负责纯 tensor 推理，Encoder 将业务输入编码为 tensor。</p>
-
-  <div class="arch-wrap">
-  <svg width="820" height="420" viewBox="0 0 820 420" fill="none">
-    <!-- Pipeline dashed box -->
-    <rect x="18" y="10" width="784" height="280" rx="12" fill="none" stroke="var(--border)" stroke-width="1.2" stroke-dasharray="6 4"/>
-    <text x="410" y="30" text-anchor="middle" font-size="11" font-weight="500" fill="var(--text-2)" letter-spacing="1.5">RECALL PIPELINE (nn.Module → .pt2)</text>
-
-    <!-- Or node -->
-    <rect x="366" y="46" width="88" height="38" rx="8" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.3"/>
-    <text x="410" y="70" text-anchor="middle" font-size="14" font-weight="500" fill="var(--accent)">Or</text>
-
-    <!-- Or → And_L, Or → And_R -->
-    <path d="M390,84 C390,108 230,108 230,124" stroke="var(--border)" stroke-width="1.2" fill="none"/>
-    <path d="M430,84 C430,108 590,108 590,124" stroke="var(--border)" stroke-width="1.2" fill="none"/>
-
-    <!-- And Left -->
-    <rect x="186" y="124" width="88" height="38" rx="8" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.3"/>
-    <text x="230" y="148" text-anchor="middle" font-size="14" font-weight="500" fill="var(--accent)">And</text>
-
-    <!-- And Right -->
-    <rect x="546" y="124" width="88" height="38" rx="8" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.3"/>
-    <text x="590" y="148" text-anchor="middle" font-size="14" font-weight="500" fill="var(--accent)">And</text>
-
-    <!-- And_L → Targeting, And_L → KNN -->
-    <path d="M210,162 C210,182 130,182 130,200" stroke="var(--border)" stroke-width="1.1" fill="none"/>
-    <path d="M250,162 C250,182 330,182 330,200" stroke="var(--border)" stroke-width="1.1" fill="none"/>
-
-    <!-- And_R → Targeting, And_R → Generative -->
-    <path d="M570,162 C570,182 490,182 490,200" stroke="var(--border)" stroke-width="1.1" fill="none"/>
-    <path d="M610,162 C610,182 700,182 700,200" stroke="var(--border)" stroke-width="1.1" fill="none"/>
-
-    <!-- Targeting 1 -->
-    <rect x="62" y="200" width="136" height="50" rx="7" fill="var(--bg-1)" stroke="var(--yellow)" stroke-width="1"/>
-    <circle cx="84" cy="220" r="3.5" fill="var(--yellow)" opacity=".7"/>
-    <text x="98" y="224" font-size="13" font-weight="500" fill="var(--text-0)">Targeting</text>
-    <text x="130" y="240" text-anchor="middle" font-size="10" fill="var(--text-2)">定向过滤</text>
-
-    <!-- KNN cosine -->
-    <rect x="262" y="200" width="136" height="50" rx="7" fill="var(--bg-1)" stroke="var(--green)" stroke-width="1"/>
-    <circle cx="284" cy="220" r="3.5" fill="var(--green)" opacity=".7"/>
-    <text x="298" y="224" font-size="13" font-weight="500" fill="var(--text-0)">KNN</text>
-    <text x="330" y="240" text-anchor="middle" class="mono" font-size="10" fill="var(--text-2)">cosine</text>
-
-    <!-- Targeting 2 -->
-    <rect x="422" y="200" width="136" height="50" rx="7" fill="var(--bg-1)" stroke="var(--yellow)" stroke-width="1"/>
-    <circle cx="444" cy="220" r="3.5" fill="var(--yellow)" opacity=".7"/>
-    <text x="458" y="224" font-size="13" font-weight="500" fill="var(--text-0)">Targeting</text>
-    <text x="490" y="240" text-anchor="middle" font-size="10" fill="var(--text-2)">定向过滤</text>
-
-    <!-- Generative -->
-    <rect x="630" y="200" width="148" height="50" rx="7" fill="var(--bg-1)" stroke="var(--red)" stroke-width="1"/>
-    <circle cx="652" cy="220" r="3.5" fill="var(--red)" opacity=".7"/>
-    <text x="666" y="224" font-size="13" font-weight="500" fill="var(--text-0)">Generative</text>
-    <text x="704" y="240" text-anchor="middle" class="mono" font-size="10" fill="var(--text-2)">beam=10</text>
-
-    <!-- Output arrow -->
-    <line x1="410" y1="290" x2="410" y2="320" stroke="var(--border)" stroke-width="1.2"/>
-    <polygon points="410,324 406,316 414,316" fill="var(--border)"/>
-
-    <!-- topk box -->
-    <rect x="360" y="328" width="100" height="34" rx="7" fill="var(--bg-1)" stroke="var(--purple)" stroke-width="1.2"/>
-    <text x="410" y="350" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple)">topk(K)</text>
-
-    <!-- Final output -->
-    <line x1="410" y1="362" x2="410" y2="386" stroke="var(--border)" stroke-width="1.2"/>
-    <polygon points="410,390 406,382 414,382" fill="var(--border)"/>
-    <text x="410" y="408" text-anchor="middle" class="mono" font-size="12" fill="var(--text-1)">scores [B, K], indices [B, K]</text>
-    <text x="410" y="420" text-anchor="middle" font-size="10" fill="var(--text-2)">→ .pt2 export / C++ inference</text>
-  </svg>
-  </div>
-  <p class="desc" style="text-align:center;color:var(--text-2);font-size:13px;font-style:italic;max-width:100%">
-    示例：Or( And(Targeting, KNN<sub>cosine</sub>), And(Targeting, Generative<sub>beam=10</sub>) ) → topk(K)</p>
-
-  <h3>Builder → RecallOp → Encoder</h3>
-  <div class="tbl-wrap"><table>
-    <tr><th>组件</th><th>职责</th><th>示例</th></tr>
-    <tr>
-      <td><b>Builder</b></td>
-      <td>离线构建索引，生成 RecallOp + meta JSON</td>
-      <td class="mono">TargetingBuilder, KNNBuilder, GenerativeBuilder</td>
-    </tr>
-    <tr>
-      <td><b>RecallOp</b></td>
-      <td>纯 tensor 推理，<code>forward()</code> 可编译导出</td>
-      <td class="mono">TargetingRecall, KNNRecall, GenerativeRecall</td>
-    </tr>
-    <tr>
-      <td><b>Encoder</b></td>
-      <td>将业务输入编码为 forward() 所需 tensor</td>
-      <td class="mono">encode_user, encode_query, encode_pipeline_inputs</td>
-    </tr>
-    <tr>
-      <td><b>Decoder</b> <span style="color:var(--text-2);font-size:12px">(仅 Generative)</span></td>
-      <td>外部传入的 nn.Module，根据用户表征 + 已选前缀输出 logits</td>
-      <td class="mono">MockDecoder (测试用)</td>
     </tr>
   </table></div>
 </section>
