@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生成式召回 — 端到端示例</title>
+<style>
+:root {
+  --bg-0: #0d1117; --bg-1: #161b22; --bg-2: #21262d;
+  --bg-card: #161b22; --border: #30363d; --border-light: #21262d;
+  --text-0: #e6edf3; --text-1: #8b949e; --text-2: #6e7681;
+  --accent: #58a6ff; --accent-bg: rgba(88,166,255,.1);
+  --green: #3fb950; --green-bg: rgba(63,185,80,.12);
+  --red: #f85149; --red-bg: rgba(248,81,73,.12);
+  --yellow: #d29922; --yellow-bg: rgba(210,153,34,.15);
+  --font: -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
+  --mono: 'SF Mono','Fira Code','JetBrains Mono','Menlo',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-height:1.65;display:grid;grid-template-columns:210px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+
+/* ── Nav ── */
+.top-nav{grid-column:1/-1;position:sticky;top:0;z-index:100;display:flex;align-items:center;padding:0 24px;gap:16px;background:rgba(13,17,23,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-light)}
+.top-nav h1{font-size:15px;font-weight:600;white-space:nowrap}
+.top-nav .params{display:flex;gap:12px;margin-left:auto}
+.top-nav .param{font-size:12px;color:var(--text-1);font-family:var(--mono)}
+.top-nav .param b{color:var(--accent)}
+
+/* ── Sidebar ── */
+.sidebar{position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;padding:20px 16px;border-right:1px solid var(--border-light);font-size:13px}
+.sidebar a{display:block;padding:6px 10px;border-radius:6px;color:var(--text-1);text-decoration:none;transition:all .15s}
+.sidebar a:hover{color:var(--text-0);background:var(--bg-2)}
+.sidebar a.active{color:var(--accent);background:var(--accent-bg);font-weight:500}
+.sidebar .sub{padding-left:20px;font-size:12px}
+
+/* ── Main ── */
+main{padding:32px 40px 80px;max-width:960px;overflow-x:hidden}
+section{margin-bottom:56px}
+h2{font-size:22px;font-weight:600;margin:0 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border-light)}
+h3{font-size:16px;font-weight:600;margin:24px 0 10px;color:var(--text-0)}
+p,.desc{color:var(--text-1);font-size:14px;margin-bottom:12px;max-width:720px}
+code{font-family:var(--mono);font-size:.9em;background:var(--bg-2);padding:1px 5px;border-radius:4px}
+
+/* ── Stats ── */
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+.stat{flex:1;min-width:110px;padding:14px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px}
+.stat .val{font-size:24px;font-weight:700;color:var(--text-0)}
+.stat .lbl{font-size:11px;color:var(--text-2);margin-top:2px}
+.stat.green .val{color:var(--green)} .stat.red .val{color:var(--red)} .stat.accent .val{color:var(--accent)}
+
+/* ── Pipeline ── */
+.pipeline{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+.pipe-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;padding:0;overflow:hidden}
+.pipe-card .hd{padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-light);font-size:13px;font-weight:600}
+.pipe-card .bd{padding:12px 16px}
+.pipe-card .bd .step{font-size:13px;color:var(--text-1);padding:2px 0}
+.pipe-card .bd .step b{color:var(--text-0)}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500}
+.badge.info{background:var(--accent-bg);color:var(--accent)}
+.badge.ok{background:var(--green-bg);color:var(--green)}
+
+/* ── Table ── */
+.tbl-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--border-light);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;background:var(--bg-2);color:var(--text-1);font-weight:600;white-space:nowrap;position:sticky;top:0}
+td{padding:7px 12px;border-top:1px solid var(--border-light);vertical-align:top}
+tr:hover td{background:rgba(255,255,255,.02)}
+tr.new td{background:var(--accent-bg)}
+tr.danger td{background:var(--red-bg)}
+td.t{color:var(--accent);font-weight:600}
+td.f{color:var(--text-2)}
+td.mono{font-family:var(--mono);font-size:12px}
+
+/* ── Trie ── */
+.trie-controls{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.trie-btn{font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;transition:all .15s;font-family:var(--font)}
+.trie-btn:hover{border-color:var(--text-2);color:var(--text-0)}
+.trie-btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:500}
+.trie-wrap{overflow-x:auto;padding:8px 0}
+.trie-info{font-size:12px;color:var(--text-1);margin-top:8px;min-height:20px}
+#beam-nav{display:none;align-items:center;gap:10px;margin-left:auto}
+#beam-nav button{background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:13px}
+#beam-nav button:hover{color:var(--text-0);border-color:var(--text-2)}
+#beam-nav .step-label{font-size:12px;color:var(--yellow);font-weight:500;min-width:120px;text-align:center}
+
+/* SVG transitions */
+#trie-svg .node rect{transition:fill .3s,stroke .3s,opacity .3s,stroke-width .3s}
+#trie-svg .node text{transition:fill .3s,opacity .3s}
+#trie-svg .edge{transition:stroke .3s,opacity .3s,stroke-width .3s}
+
+/* ── Beam Table ── */
+.beam-table td{font-family:var(--mono);font-size:12px}
+.beam-table .tip{color:var(--green);font-weight:600}
+.beam-table .inf{color:var(--text-2)}
+
+/* ── Result ── */
+.result-row td:first-child{font-weight:700;font-size:14px}
+tr.best td{background:var(--green-bg)}
+tr.filtered td{background:var(--red-bg);color:var(--text-2)}
+
+/* ── CSR Interactive ── */
+.state-picker{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.state-picker .label{font-size:12px;color:var(--text-1);margin-right:6px}
+.sbtn{font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-family:var(--mono);transition:all .15s}
+.sbtn:hover{border-color:var(--text-2);color:var(--text-0)}
+.sbtn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+.csr-strip{display:flex;gap:2px;padding:6px 0;overflow-x:auto}
+.csr-strip .grp{display:flex;gap:2px;padding:2px;border-radius:5px;border:1px solid transparent;transition:all .3s}
+.csr-strip .grp.hi{border-color:var(--accent);background:var(--accent-bg)}
+.csr-strip .grp-label{font-size:9px;color:var(--text-2);text-align:center;margin-bottom:2px;font-family:var(--mono)}
+.csr-strip .grp.hi .grp-label{color:var(--accent);font-weight:600}
+.cc{width:58px;padding:4px 2px;text-align:center;border-radius:3px;background:var(--bg-2);transition:all .3s;cursor:default}
+.cc .ci{font-size:8px;color:var(--text-2);font-family:var(--mono)}
+.cc .cv{font-size:10px;color:var(--text-1);font-family:var(--mono);margin-top:1px;white-space:nowrap}
+.grp.hi .cc{background:rgba(88,166,255,.12)}
+.grp.hi .cv{color:var(--accent);font-weight:600}
+.csr-result-box{font-size:13px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;margin:10px 0;min-height:60px;line-height:1.8}
+.csr-result-box .step-line{color:var(--text-1)}
+.csr-result-box .step-line b{color:var(--accent)}
+.csr-result-box .step-result{color:var(--green);font-weight:500;margin-top:4px}
+.csr-result-box .step-arrow{color:var(--yellow);margin:0 4px}
+
+/* ── Dense Grid ── */
+.dense-grid{display:inline-grid;gap:2px;margin:10px 0}
+.dc{width:70px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:10px;font-family:var(--mono);border:1px solid var(--border-light);transition:all .2s;cursor:default;position:relative}
+.dc.empty{background:var(--bg-1);color:var(--text-2)}
+.dc.hit{background:var(--green-bg);border-color:var(--green);color:var(--green);font-weight:700;cursor:pointer}
+.dc.hit:hover{transform:scale(1.06);box-shadow:0 0 12px rgba(63,185,80,.3)}
+.dc.hdr{background:none;border:none;color:var(--text-2);font-weight:600;font-size:10px}
+.dense-tooltip{font-size:12px;color:var(--text-1);margin-top:6px;min-height:18px}
+
+/* ── Leaf Visual ── */
+.leaf-cards{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.lc{padding:10px 14px;border:1px solid var(--border-light);border-radius:8px;background:var(--bg-1);text-align:center;min-width:100px;transition:all .2s}
+.lc:hover{border-color:var(--accent);transform:translateY(-2px)}
+.lc .lc-st{font-size:10px;color:var(--text-2);font-family:var(--mono)}
+.lc .lc-items{font-size:15px;font-weight:700;margin:6px 0 2px;letter-spacing:1px}
+.lc .lc-ids{font-size:9px;color:var(--text-2);font-family:var(--mono)}
+.lc.shared{border-color:var(--yellow);background:var(--yellow-bg)}
+.lc.shared:hover{border-color:var(--yellow)}
+.lc.shared .lc-items{color:var(--yellow)}
+
+/* ── Responsive ── */
+@media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:56px 1fr} .sidebar{display:none} main{padding:20px 16px 60px}}
+</style>
+</head>
+<body>
+
+<!-- ━━━ Top Nav ━━━ -->
+<nav class="top-nav">
+  <h1>生成式召回 — 端到端示例</h1>
+  <div class="params">
+    <span class="param">V=<b>2048</b></span>
+    <span class="param">L=<b>5</b></span>
+    <span class="param">d_dense=<b>2</b></span>
+    <span class="param">beam=<b>3</b></span>
+  </div>
+</nav>
+
+<!-- ━━━ Sidebar ━━━ -->
+<aside class="sidebar">
+  <a href="#overview">概览</a>
+  <a href="#input" class="sub">输入数据</a>
+  <a href="#offline">离线构建</a>
+  <a href="#offline-diffscan" class="sub">diff-scan</a>
+  <a href="#offline-stateid" class="sub">State ID</a>
+  <a href="#offline-tables" class="sub">packed_csr 边表</a>
+  <a href="#offline-dense" class="sub">Dense 表</a>
+  <a href="#offline-leaf" class="sub">Leaf 映射</a>
+  <a href="#trie">Trie 结构</a>
+  <a href="#inference">在线推理</a>
+  <a href="#phase1" class="sub">Phase 1 Targeting</a>
+  <a href="#phase2" class="sub">Phase 2 Validity</a>
+  <a href="#phase3" class="sub">Phase 3 Beam Search</a>
+  <a href="#phase4" class="sub">Phase 4 Resolve</a>
+  <a href="#result" class="sub">最终结果</a>
+  <a href="#tensors">Tensor 速查</a>
+</aside>
+
+<!-- ━━━ Main ━━━ -->
+<main>
+
+<!-- ── 概览 ── -->
+<section id="overview">
+  <h2>概览</h2>
+  <p>推荐系统需要从百万级候选 item 中快速挑选最相关的结果。本系统将每个 item 编码为固定长度的
+    token 路径（语义 ID / SID），组织成 <b>Trie 树</b>。在线推理时通过 <b>Beam Search</b>
+    在 Trie 上逐层搜索，每步只保留分数最高的 <code>beam_width</code> 条路径。</p>
+
+  <div class="stats">
+    <div class="stat accent"><div class="val">2048</div><div class="lbl">V · 词表大小</div></div>
+    <div class="stat accent"><div class="val">5</div><div class="lbl">L · 路径长度</div></div>
+    <div class="stat accent"><div class="val">2</div><div class="lbl">d_dense · Dense 层数</div></div>
+    <div class="stat accent"><div class="val">3</div><div class="lbl">beam_width</div></div>
+  </div>
+
+  <div class="pipeline">
+    <div class="pipe-card">
+      <div class="hd">离线构建 <span class="badge info">Offline</span></div>
+      <div class="bd">
+        <div class="step"><b>items + sid_paths</b></div>
+        <div class="step">→ 1. 按字典序排序 (lexsort)</div>
+        <div class="step">→ 2. diff-scan 找分叉点</div>
+        <div class="step">→ 3. 分配 State ID</div>
+        <div class="step">→ 4. 构建 CSR + Dense + Leaf 表</div>
+        <div class="step"><b>= Trie (torch.nn.Module)</b></div>
+      </div>
+    </div>
+    <div class="pipe-card">
+      <div class="hd">在线推理 <span class="badge ok">Online</span></div>
+      <div class="bd">
+        <div class="step"><b>用户特征 + query</b></div>
+        <div class="step">→ Phase 1: Targeting Mask</div>
+        <div class="step">→ Phase 2: Validity Propagation (剪枝)</div>
+        <div class="step">→ Phase 3: Beam Search (逐层 topk)</div>
+        <div class="step">→ Phase 4: Resolve Leaves → item 分数</div>
+        <div class="step"><b>= TopK 推荐结果</b></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>代码文件</h3>
+  <p class="desc">所有代码位于 <code>torch_recall/recall_method/generative/</code></p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>文件</th><th>职责</th></tr>
+    <tr><td class="mono">builder.py → build()</td><td>离线构建入口</td></tr>
+    <tr><td class="mono">builder.py → _build_static_index()</td><td>核心构建逻辑（纯 NumPy 向量化）</td></tr>
+    <tr><td class="mono">builder.py → _build_leaf_mapping()</td><td>叶子 → item 映射表</td></tr>
+    <tr><td class="mono">trie.py → Trie</td><td>存储所有离线构建 tensor (registered buffer)</td></tr>
+    <tr><td class="mono">trie.py → propagate_validity()</td><td>自底向上剪枝 (Phase 2)</td></tr>
+    <tr><td class="mono">trie.py → resolve_leaves()</td><td>叶子 state → item 分数映射 (Phase 4)</td></tr>
+    <tr><td class="mono">recall.py → forward()</td><td>在线推理入口 (Phase 1~4)</td></tr>
+    <tr><td class="mono">recall.py → _step_dense()</td><td>Beam Search Dense 步 (前 d_dense 层)</td></tr>
+    <tr><td class="mono">recall.py → _step_csr()</td><td>Beam Search CSR 步 (d_dense 层之后)</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ── 输入数据 ── -->
+<section id="input">
+  <h2>输入数据</h2>
+  <p>7 个 item，使用两个首 token（0 和 1）。item a 和 b 共享完全相同的 SID 路径。</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Item</th><th>SID Path</th><th>Targeting Rule</th><th>备注</th></tr>
+    <tr><td>a</td><td class="mono">[0, 1, 2, 3, 4]</td><td>city == "北京"</td><td></td></tr>
+    <tr><td>b</td><td class="mono">[0, 1, 2, 3, 4]</td><td>city == "北京"</td><td style="color:var(--accent)">与 a 共享路径</td></tr>
+    <tr><td>c</td><td class="mono">[0, 1, 5, 6, 7]</td><td>city == "上海"</td><td></td></tr>
+    <tr><td>d</td><td class="mono">[0, 2, 8, 9, 10]</td><td>age > 18</td><td></td></tr>
+    <tr><td>e</td><td class="mono">[0, 2, 8, 9, 11]</td><td>city == "北京"</td><td></td></tr>
+    <tr><td>f</td><td class="mono">[1, 3, 12, 13, 14]</td><td>city == "广州"</td><td style="color:var(--yellow)">首 token = 1</td></tr>
+    <tr><td>g</td><td class="mono">[1, 4, 17, 18, 19]</td><td>city == "深圳"</td><td style="color:var(--yellow)">首 token = 1</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ── 离线构建 ── -->
+<section id="offline">
+  <h2>离线构建</h2>
+
+  <h3 id="offline-diffscan">Step 1: 排序 + diff-scan</h3>
+  <p><code>np.lexsort</code> 按字典序排列（本例已有序）。然后逐行比较相邻 item，找到首个不同的 depth。
+    该 depth 及更深层都标记为新节点 (<code>is_new=True</code>)，意味着需要在 Trie 中创建新 state。</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Row</th><th>d0</th><th>d1</th><th>d2</th><th>d3</th><th>d4</th><th>分叉说明</th></tr>
+    <tr class="new"><td>0 (a)</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td>首行，全部新节点</td></tr>
+    <tr><td>1 (b)</td><td class="f">F</td><td class="f">F</td><td class="f">F</td><td class="f">F</td><td class="f">F</td><td>与 row 0 完全相同</td></tr>
+    <tr><td>2 (c)</td><td class="f">F</td><td class="f">F</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td>depth 2 起新分支</td></tr>
+    <tr><td>3 (d)</td><td class="f">F</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td>depth 1 起新分支</td></tr>
+    <tr><td>4 (e)</td><td class="f">F</td><td class="f">F</td><td class="f">F</td><td class="f">F</td><td class="t">T</td><td>仅 depth 4 新叶子</td></tr>
+    <tr class="new"><td>5 (f)</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td>首 token 变了，全部新</td></tr>
+    <tr><td>6 (g)</td><td class="f">F</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td class="t">T</td><td>depth 1 起新分支</td></tr>
+  </table>
+  </div>
+
+  <h3 id="offline-stateid">Step 2: State ID 分配</h3>
+  <p>L0 固定分配 V=2048 个槽位 (<code>state = token + 1</code>)；深层只为 <code>is_new=True</code>
+    的行分配新 ID，其余通过 <code>np.maximum.accumulate</code> 继承（共享前缀的 item 自动获得相同 state）。</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Row</th><th>d0 (L0)</th><th>d1 (L1)</th><th>d2 (L2)</th><th>d3 (L3)</th><th>d4 (L4)</th></tr>
+    <tr><td>0 (a)</td><td class="mono">1</td><td class="mono">2049</td><td class="mono">2053</td><td class="mono">2058</td><td class="mono">2063</td></tr>
+    <tr><td>1 (b)</td><td class="mono">1</td><td class="mono">2049</td><td class="mono">2053</td><td class="mono">2058</td><td class="mono">2063</td></tr>
+    <tr><td>2 (c)</td><td class="mono">1</td><td class="mono">2049</td><td class="mono">2054</td><td class="mono">2059</td><td class="mono">2064</td></tr>
+    <tr><td>3 (d)</td><td class="mono">1</td><td class="mono">2050</td><td class="mono">2055</td><td class="mono">2060</td><td class="mono">2065</td></tr>
+    <tr><td>4 (e)</td><td class="mono">1</td><td class="mono">2050</td><td class="mono">2055</td><td class="mono">2060</td><td class="mono">2066</td></tr>
+    <tr><td>5 (f)</td><td class="mono">2</td><td class="mono">2051</td><td class="mono">2056</td><td class="mono">2061</td><td class="mono">2067</td></tr>
+    <tr><td>6 (g)</td><td class="mono">2</td><td class="mono">2052</td><td class="mono">2057</td><td class="mono">2062</td><td class="mono">2068</td></tr>
+  </table>
+  </div>
+  <div class="stats">
+    <div class="stat green"><div class="val">2069</div><div class="lbl">总 state 数</div></div>
+    <div class="stat"><div class="val">20</div><div class="lbl">真实边数</div></div>
+    <div class="stat"><div class="val">6</div><div class="lbl">叶子数 (L4)</div></div>
+  </div>
+  <p class="desc">L0 预分配 2048 个 state 是 Dense 层用空间换 O(1) 查表的代价 — State 3~2048 全为空。L1 从 State 2049 开始。</p>
+
+  <h3 id="offline-tables">Step 3: CSR / Dense / Leaf 表</h3>
+
+  <!-- ══════ 3a: CSR Interactive ══════ -->
+  <h3>3a. packed_csr + csr_indptr — CSR 边表</h3>
+  <p><b>CSR（Compressed Sparse Row）</b>把所有边按父节点排成一个扁平数组 <code>packed_csr</code>，
+    再用指针数组 <code>indptr</code> 记录每个 state 的子节点在哪一段。
+    查询 state <code>s</code> 的子节点 = <code>packed_csr[ indptr[s] : indptr[s+1] ]</code>。</p>
+  <p class="desc" style="color:var(--accent)">点击下方任意 state，查看 CSR 查表的完整过程:</p>
+
+  <div class="state-picker" id="csr-picker"></div>
+  <p style="font-size:11px;color:var(--text-2);margin:4px 0">packed_csr 数组 — 每组是一个 state 的所有出边，组内每格 = [token, child_state]:</p>
+  <div class="csr-strip" id="csr-strip"></div>
+  <div class="csr-result-box" id="csr-result">
+    <span style="color:var(--text-2)">← 点击上方的 State 按钮试试</span>
+  </div>
+  <p class="desc" style="margin-top:12px"><b>关键观察：</b>State 3~2048 （L0 的 2046 个空槽位）在 indptr 中全部指向同一位置 (4)。
+    它们不占 packed_csr 空间，但各占 indptr 的一个位置 — 这是 Dense 层预分配 V 个 state 的代价。
+    末尾追加 2048 行 <code>[2048, 0]</code> 作为 OOB 安全填充，防止越界读取。</p>
+
+  <!-- ══════ 3b: Dense Interactive ══════ -->
+  <h3 id="offline-dense">3b. Dense 表 (前 d_dense=2 层)</h3>
+  <p><b>为什么用 Dense 表？</b> 前几层用 token 值直接做数组下标，O(1) 查表，比 CSR 的 slice 更快。
+    代价是空间：<code>[2048, 2048]</code> 的数组中绝大多数位置是空的。
+    Beam Search 前 d_dense=2 步用 Dense 表，之后切换为 CSR。</p>
+  <p class="desc" style="color:var(--accent)">下方是 dense_mask[2048, 2048] 的放大视图 (token 0~7 区域)，绿色格子 = 存在的前缀，点击可查看 state:</p>
+
+  <div id="dense-widget"></div>
+  <div class="dense-tooltip" id="dense-tip"></div>
+
+  <div class="pipe-card" style="margin:16px 0">
+    <div class="hd">Dense vs CSR 对比 <span class="badge info">O(1) vs O(slice)</span></div>
+    <div class="bd">
+      <div class="step">Beam 在 State 1 (token=0)，想查 token 2 的子节点:</div>
+      <div class="step" style="color:var(--green)"><b>Dense:</b> <code>dense_states[0, 2]</code> → <b>2050</b> — 一次数组下标，完成</div>
+      <div class="step" style="color:var(--yellow)"><b>CSR:</b> indptr[1]=0, indptr[2]=2 → packed_csr[0:2] → 遍历找 token=2 的行 → 2050</div>
+    </div>
+  </div>
+
+  <!-- ══════ 3c: Leaf Visual ══════ -->
+  <h3 id="offline-leaf">3c. Leaf → Item 映射</h3>
+  <p>每个叶子关联若干 item。因为不同叶子关联的 item 数量不同，tensor 用 0 补齐成矩形 <code>[6, 2]</code>，
+    <code>leaf_item_valid</code> 标记哪些是真实 item、哪些是 padding。</p>
+  <p class="desc" style="color:var(--accent)">黄色卡片 = 多个 item 共享叶子（特殊情况）:</p>
+  <div class="leaf-cards" id="leaf-cards"></div>
+  <p class="desc" style="margin-top:8px"><code>max_items_per_leaf = 2</code>（因为 leaf 0 关联了 2 个 item）。
+    局部索引 = state_id - 2063 (leaf_start)。Phase 4 用 <code>scatter_reduce(amax)</code> 将 beam 分数写回 item 维度。</p>
+</section>
+
+<!-- ── Trie ── -->
+<section id="trie">
+  <h2>Trie 结构</h2>
+  <div class="trie-controls">
+    <button class="trie-btn active" data-mode="structure">完整结构</button>
+    <button class="trie-btn" data-mode="pruned">剪枝后 (北京, 25岁)</button>
+    <button class="trie-btn" data-mode="beam">Beam Search 动画</button>
+    <div id="beam-nav">
+      <button id="beam-prev">&lt;</button>
+      <span class="step-label" id="beam-label">Step 0</span>
+      <button id="beam-next">&gt;</button>
+    </div>
+  </div>
+  <div class="trie-wrap">
+    <svg id="trie-svg" width="840" height="410" viewBox="0 0 840 410"></svg>
+  </div>
+  <div class="trie-info" id="trie-info"></div>
+
+  <h3>State ID 全局布局</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>区间</th><th>层</th><th>节点数</th><th>用途</th></tr>
+    <tr><td>State 0</td><td>—</td><td>1</td><td>占位符 (padding / OOB)</td></tr>
+    <tr><td>State 1 ~ 2048</td><td>L0</td><td>2048</td><td>V 个槽位 (仅 State 1, 2 有 item)</td></tr>
+    <tr><td>State 2049 ~ 2052</td><td>L1</td><td>4</td><td>前缀节点</td></tr>
+    <tr><td>State 2053 ~ 2057</td><td>L2</td><td>5</td><td>前缀节点</td></tr>
+    <tr><td>State 2058 ~ 2062</td><td>L3</td><td>5</td><td>前缀节点</td></tr>
+    <tr><td>State 2063 ~ 2068</td><td>L4</td><td>6</td><td>叶子节点 (映射到 item)</td></tr>
+  </table></div>
+</section>
+
+<!-- ── 在线推理 ── -->
+<section id="inference">
+  <h2>在线推理</h2>
+  <p>用户属性: <code>city="北京", age=25</code>。经过 4 个 Phase 完成推理。</p>
+
+  <h3 id="phase1">Phase 1: Targeting Mask</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Item</th><th>Rule</th><th>匹配?</th></tr>
+    <tr><td>a</td><td>city == "北京"</td><td style="color:var(--green)">匹配</td></tr>
+    <tr><td>b</td><td>city == "北京"</td><td style="color:var(--green)">匹配</td></tr>
+    <tr class="danger"><td>c</td><td>city == "上海"</td><td style="color:var(--red)">不匹配</td></tr>
+    <tr><td>d</td><td>age > 18</td><td style="color:var(--green)">匹配</td></tr>
+    <tr><td>e</td><td>city == "北京"</td><td style="color:var(--green)">匹配</td></tr>
+    <tr class="danger"><td>f</td><td>city == "广州"</td><td style="color:var(--red)">不匹配</td></tr>
+    <tr class="danger"><td>g</td><td>city == "深圳"</td><td style="color:var(--red)">不匹配</td></tr>
+  </table></div>
+  <p class="desc"><code>item_mask = [T, T, F, T, T, F, F]</code>，不匹配的 item 得分设为 <code>-inf</code>。</p>
+
+  <h3 id="phase2">Phase 2: Validity Propagation</h3>
+  <p>从叶子层向上传播：只要子树下有至少一个 valid item，节点就 valid。</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>层</th><th>传播结果</th></tr>
+    <tr><td>L4 叶子</td><td class="mono">St2063(a,b) <b style="color:var(--green)">T</b> | St2064(c) <b style="color:var(--red)">F</b> | St2065(d) <b style="color:var(--green)">T</b> | St2066(e) <b style="color:var(--green)">T</b> | St2067(f) <b style="color:var(--red)">F</b> | St2068(g) <b style="color:var(--red)">F</b></td></tr>
+    <tr><td>L3</td><td class="mono">St2058 <b style="color:var(--green)">T</b> | St2059 <b style="color:var(--red)">F</b> | St2060 <b style="color:var(--green)">T</b> | St2061 <b style="color:var(--red)">F</b> | St2062 <b style="color:var(--red)">F</b></td></tr>
+    <tr><td>L2</td><td class="mono">St2053 <b style="color:var(--green)">T</b> | St2054 <b style="color:var(--red)">F</b> | St2055 <b style="color:var(--green)">T</b> | St2056 <b style="color:var(--red)">F</b> | St2057 <b style="color:var(--red)">F</b></td></tr>
+    <tr><td>L1</td><td class="mono">St2049 <b style="color:var(--green)">T</b> | St2050 <b style="color:var(--green)">T</b> | St2051 <b style="color:var(--red)">F</b> | St2052 <b style="color:var(--red)">F</b></td></tr>
+    <tr><td>L0</td><td class="mono">St1(tok=0) <b style="color:var(--green)">T</b> | St2(tok=1) <b style="color:var(--red)">F</b></td></tr>
+  </table></div>
+  <p class="desc">token=1 的整棵子树 (item f, g) 和 item c 的分支被剪掉。仅剩 3 条有效路径。<br>
+    <span style="color:var(--accent)">→ 点击上方 Trie 的「剪枝后」按钮查看效果</span></p>
+
+  <h3 id="phase3">Phase 3: Beam Search (beam_width=3)</h3>
+  <p class="desc">每步对 beam × children 所有候选做全局 topk。Step 0~1 用 Dense 表 O(1) 查询；Step 2~4 用 CSR。</p>
+  <div class="tbl-wrap"><table class="beam-table">
+    <tr><th>Step</th><th>方法</th><th>Beam 0</th><th>Beam 1</th><th>Beam 2</th></tr>
+    <tr><td>0</td><td>首 token</td><td class="tip">tok=0 → St 1  (-0.5)</td><td class="inf">-inf</td><td class="inf">-inf</td></tr>
+    <tr><td>1</td><td>Dense</td><td class="tip">tok=2 → St 2050  (-0.8)</td><td>tok=1 → St 2049  (-1.3)</td><td class="inf">-inf</td></tr>
+    <tr><td>2</td><td>CSR</td><td class="tip">tok=8 → St 2055  (-1.2)</td><td>tok=2 → St 2053  (-1.9)</td><td class="inf">-inf</td></tr>
+    <tr><td>3</td><td>CSR</td><td class="tip">tok=9 → St 2060  (-1.4)</td><td>tok=3 → St 2058  (-2.4)</td><td class="inf">-inf</td></tr>
+    <tr><td>4</td><td>CSR (叶)</td><td class="tip">tok=10 → St 2065 [d]  (-1.7)</td><td>tok=11 → St 2066 [e]  (-2.1)</td><td>tok=4 → St 2063 [a,b]  (-2.8)</td></tr>
+  </table></div>
+  <p class="desc" style="color:var(--accent)">→ 点击 Trie 的「Beam Search 动画」按钮可逐步查看搜索过程</p>
+
+  <h3 id="phase4">Phase 4: Resolve Leaves</h3>
+  <p>叶子 state 通过 <code>leaf_item_ids</code> 映射回 item index，用 <code>scatter_reduce(amax)</code> 聚合分数。
+    State 2063 同时映射到 item a 和 b（共享叶子），二者获得相同分数。</p>
+
+  <h3 id="result">最终结果</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>排名</th><th>Item</th><th>分数</th><th>路径</th></tr>
+    <tr class="best"><td>#1</td><td>item d (连锁火锅)</td><td class="mono">-1.7</td><td class="mono">[0, 2, 8, 9, 10]</td></tr>
+    <tr><td>#2</td><td>item e (学生套餐)</td><td class="mono">-2.1</td><td class="mono">[0, 2, 8, 9, 11]</td></tr>
+    <tr><td>#3</td><td>item a (北京烤鸭)</td><td class="mono">-2.8</td><td class="mono">[0, 1, 2, 3, 4]</td></tr>
+    <tr><td>#4</td><td>item b (全聚德)</td><td class="mono">-2.8</td><td class="mono">[0, 1, 2, 3, 4]</td></tr>
+    <tr class="filtered"><td>#5~7</td><td>item c, f, g</td><td class="mono">-inf</td><td>(targeting 过滤)</td></tr>
+  </table></div>
+  <p class="desc">被 targeting 过滤的 item 在 Phase 2 就从 Trie 中剪掉，beam search 根本不会探索到它们。</p>
+</section>
+
+<!-- ── Tensor 速查 ── -->
+<section id="tensors">
+  <h2>Tensor 速查</h2>
+  <h3>离线构建的 Tensor (Trie registered buffer)</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Tensor</th><th>形状</th><th>含义</th><th>用在哪</th></tr>
+    <tr><td class="mono">start_mask</td><td class="mono">[V] bool</td><td>哪些首 token 在 Trie 中存在</td><td>Beam Search Step 0</td></tr>
+    <tr><td class="mono">dense_mask</td><td class="mono">[V, V] bool</td><td>前 d_dense 层密集查表</td><td>Dense 步: O(1) 判断</td></tr>
+    <tr><td class="mono">dense_states</td><td class="mono">[V, V] int64</td><td>前 d_dense 层 state 查表</td><td>Dense 步: 获取 state ID</td></tr>
+    <tr><td class="mono">packed_csr</td><td class="mono">[E+V, 2] int64</td><td>CSR 全量边表 [token, child]</td><td>CSR 步 + Validity</td></tr>
+    <tr><td class="mono">csr_indptr</td><td class="mono">[S+2] int64</td><td>CSR 行指针</td><td>定位子节点区间</td></tr>
+    <tr><td class="mono">leaf_item_ids</td><td class="mono">[nL, M] int64</td><td>叶子 → item 映射</td><td>Phase 4 Resolve</td></tr>
+    <tr><td class="mono">leaf_item_valid</td><td class="mono">[nL, M] bool</td><td>叶子 → item 有效性</td><td>Phase 4 Resolve</td></tr>
+  </table></div>
+
+  <h3>推理时动态生成的 Tensor</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Tensor</th><th>形状</th><th>含义</th><th>用在哪</th></tr>
+    <tr><td class="mono">item_mask</td><td class="mono">[B, N] bool</td><td>targeting 匹配结果</td><td>Phase 1 → 2</td></tr>
+    <tr><td class="mono">node_valid</td><td class="mono">[B, S] bool</td><td>节点有效性</td><td>Phase 2 → 3</td></tr>
+    <tr><td class="mono">beam_states</td><td class="mono">[B, beam] int64</td><td>当前 beam 的 state ID</td><td>Phase 3</td></tr>
+    <tr><td class="mono">beam_scores</td><td class="mono">[B, beam] float</td><td>累积 log-prob</td><td>Phase 3</td></tr>
+    <tr><td class="mono">beam_paths</td><td class="mono">[B, beam, L] int64</td><td>已选 token 序列</td><td>Phase 3</td></tr>
+  </table></div>
+  <p class="desc">V=词表大小, L=路径长度, E=总边数, S=总 state 数, nL=叶子数, M=每叶最大 item 数, B=batch。</p>
+
+  <h3>本例构建结果</h3>
+  <div class="stats">
+    <div class="stat green"><div class="val">2069</div><div class="lbl">总 state 数 (S)</div></div>
+    <div class="stat"><div class="val">20</div><div class="lbl">真实边数 (E)</div></div>
+    <div class="stat"><div class="val">6</div><div class="lbl">叶子数 (nL)</div></div>
+    <div class="stat"><div class="val">2</div><div class="lbl">最大每叶 item (M)</div></div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <tr><th>Tensor</th><th>实际形状</th><th>关键值</th></tr>
+    <tr><td class="mono">start_mask</td><td class="mono">[2048]</td><td>idx 0, 1 = True，其余 False</td></tr>
+    <tr><td class="mono">dense_mask</td><td class="mono">[2048, 2048]</td><td>4 个 True: [0,1], [0,2], [1,3], [1,4]</td></tr>
+    <tr><td class="mono">dense_states</td><td class="mono">[2048, 2048]</td><td>4 个非零: 2049, 2050, 2051, 2052</td></tr>
+    <tr><td class="mono">packed_csr</td><td class="mono">[2068, 2]</td><td>20 真实边 + 2048 OOB 安全填充</td></tr>
+    <tr><td class="mono">csr_indptr</td><td class="mono">[2071]</td><td>State 3~2048 全为同一值 (空 L0 槽位)</td></tr>
+    <tr><td class="mono">leaf_item_ids</td><td class="mono">[6, 2]</td><td>leaf 0 = [0, 1] (a, b 共享路径)</td></tr>
+    <tr><td class="mono">leaf_item_valid</td><td class="mono">[6, 2]</td><td>leaf 0 = [T, T], 其余 = [T, F]</td></tr>
+  </table></div>
+</section>
+
+</main>
+
+<!-- ━━━━━ Script ━━━━━ -->
+<script>
+/* ── Trie Data ── */
+const NW = 90, NH = 40, NS = 'http://www.w3.org/2000/svg';
+const nodes = [
+  { id:'S1',    x:240, y:20,  label:'St 1',    sub:'tok=0',     valid:true,  leaf:false },
+  { id:'S2',    x:635, y:20,  label:'St 2',    sub:'tok=1',     valid:false, leaf:false },
+  { id:'S2049', x:110, y:100, label:'St 2049', sub:'tok=1',     valid:true,  leaf:false },
+  { id:'S2050', x:370, y:100, label:'St 2050', sub:'tok=2',     valid:true,  leaf:false },
+  { id:'S2051', x:570, y:100, label:'St 2051', sub:'tok=3',     valid:false, leaf:false },
+  { id:'S2052', x:700, y:100, label:'St 2052', sub:'tok=4',     valid:false, leaf:false },
+  { id:'S2053', x:50,  y:180, label:'St 2053', sub:'t=2',       valid:true,  leaf:false },
+  { id:'S2054', x:170, y:180, label:'St 2054', sub:'t=5',       valid:false, leaf:false },
+  { id:'S2055', x:370, y:180, label:'St 2055', sub:'t=8',       valid:true,  leaf:false },
+  { id:'S2056', x:570, y:180, label:'St 2056', sub:'t=12',      valid:false, leaf:false },
+  { id:'S2057', x:700, y:180, label:'St 2057', sub:'t=17',      valid:false, leaf:false },
+  { id:'S2058', x:50,  y:260, label:'St 2058', sub:'t=3',       valid:true,  leaf:false },
+  { id:'S2059', x:170, y:260, label:'St 2059', sub:'t=6',       valid:false, leaf:false },
+  { id:'S2060', x:370, y:260, label:'St 2060', sub:'t=9',       valid:true,  leaf:false },
+  { id:'S2061', x:570, y:260, label:'St 2061', sub:'t=13',      valid:false, leaf:false },
+  { id:'S2062', x:700, y:260, label:'St 2062', sub:'t=18',      valid:false, leaf:false },
+  { id:'S2063', x:50,  y:350, label:'St 2063', sub:'t=4 [a,b]', valid:true,  leaf:true },
+  { id:'S2064', x:170, y:350, label:'St 2064', sub:'t=7 [c]',   valid:false, leaf:true },
+  { id:'S2065', x:300, y:350, label:'St 2065', sub:'t=10 [d]',  valid:true,  leaf:true },
+  { id:'S2066', x:440, y:350, label:'St 2066', sub:'t=11 [e]',  valid:true,  leaf:true },
+  { id:'S2067', x:570, y:350, label:'St 2067', sub:'t=14 [f]',  valid:false, leaf:true },
+  { id:'S2068', x:700, y:350, label:'St 2068', sub:'t=19 [g]',  valid:false, leaf:true },
+];
+const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+const edges = [
+  ['S1','S2049'],['S1','S2050'],['S2','S2051'],['S2','S2052'],
+  ['S2049','S2053'],['S2049','S2054'],['S2050','S2055'],
+  ['S2051','S2056'],['S2052','S2057'],
+  ['S2053','S2058'],['S2054','S2059'],['S2055','S2060'],
+  ['S2056','S2061'],['S2057','S2062'],
+  ['S2058','S2063'],['S2059','S2064'],['S2060','S2065'],['S2060','S2066'],
+  ['S2061','S2067'],['S2062','S2068'],
+];
+
+const layers = ['L0','L1','L2','L3','L4'];
+const layerY = [20,100,180,260,350];
+
+const beamSteps = [
+  { label:'Step 0: 首 token',  tips:['S1'],                      pathN:['S1'],                                                                                   pathE:[], info:'Beam 0: tok=0 → St 1 (score=-0.5)' },
+  { label:'Step 1: Dense 步',  tips:['S2050','S2049'],            pathN:['S1','S2050','S2049'],                                                                    pathE:['S1-S2050','S1-S2049'], info:'Beam 0: tok=2 → St 2050 (-0.8)\nBeam 1: tok=1 → St 2049 (-1.3)' },
+  { label:'Step 2: CSR 步',    tips:['S2055','S2053'],            pathN:['S1','S2050','S2055','S2049','S2053'],                                                     pathE:['S1-S2050','S2050-S2055','S1-S2049','S2049-S2053'], info:'Beam 0: tok=8 → St 2055 (-1.2)\nBeam 1: tok=2 → St 2053 (-1.9)' },
+  { label:'Step 3: CSR 步',    tips:['S2060','S2058'],            pathN:['S1','S2050','S2055','S2060','S2049','S2053','S2058'],                                     pathE:['S1-S2050','S2050-S2055','S2055-S2060','S1-S2049','S2049-S2053','S2053-S2058'], info:'Beam 0: tok=9 → St 2060 (-1.4)\nBeam 1: tok=3 → St 2058 (-2.4)' },
+  { label:'Step 4: CSR (叶)',  tips:['S2065','S2066','S2063'],    pathN:['S1','S2050','S2055','S2060','S2065','S2066','S2049','S2053','S2058','S2063'],              pathE:['S1-S2050','S2050-S2055','S2055-S2060','S2060-S2065','S2060-S2066','S1-S2049','S2049-S2053','S2053-S2058','S2058-S2063'], info:'Beam 0: tok=10 → St 2065 [d] (-1.7)\nBeam 1: tok=11 → St 2066 [e] (-2.1)\nBeam 2: tok=4 → St 2063 [a,b] (-2.8)' },
+];
+
+/* ── Render Trie SVG ── */
+const svg = document.getElementById('trie-svg');
+const edgeEls = {}, nodeEls = {};
+
+/* layer labels */
+layers.forEach((l, i) => {
+  const t = document.createElementNS(NS,'text');
+  t.setAttribute('x','8'); t.setAttribute('y', layerY[i] + NH/2 + 4);
+  t.setAttribute('fill','#6e7681'); t.setAttribute('font-size','11');
+  t.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
+  t.setAttribute('font-weight','500');
+  t.textContent = l; svg.appendChild(t);
+});
+
+/* edges */
+const eg = document.createElementNS(NS,'g');
+edges.forEach(([from, to]) => {
+  const f = nodeMap[from], t = nodeMap[to];
+  const sx = f.x + NW/2, sy = f.y + NH;
+  const tx = t.x + NW/2, ty = t.y;
+  const my = (sy + ty) / 2;
+  const p = document.createElementNS(NS,'path');
+  p.setAttribute('d', `M ${sx} ${sy} C ${sx} ${my}, ${tx} ${my}, ${tx} ${ty}`);
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke','#30363d');
+  p.setAttribute('stroke-width','1.5');
+  p.classList.add('edge');
+  const eid = `${from}-${to}`;
+  p.dataset.id = eid;
+  p.dataset.valid = (f.valid && t.valid) ? 'true' : 'false';
+  edgeEls[eid] = p;
+  eg.appendChild(p);
+});
+svg.appendChild(eg);
+
+/* nodes */
+const ng = document.createElementNS(NS,'g');
+nodes.forEach(n => {
+  const g = document.createElementNS(NS,'g');
+  g.classList.add('node');
+  g.dataset.id = n.id;
+
+  const r = document.createElementNS(NS,'rect');
+  r.setAttribute('x', n.x); r.setAttribute('y', n.y);
+  r.setAttribute('width', NW); r.setAttribute('height', NH);
+  r.setAttribute('rx','6');
+  r.setAttribute('fill','#1a1f2b'); r.setAttribute('stroke','#30363d');
+  r.setAttribute('stroke-width','1');
+  g.appendChild(r);
+
+  const t1 = document.createElementNS(NS,'text');
+  t1.setAttribute('x', n.x + NW/2); t1.setAttribute('y', n.y + 16);
+  t1.setAttribute('text-anchor','middle');
+  t1.setAttribute('fill','#e6edf3'); t1.setAttribute('font-size','11');
+  t1.setAttribute('font-weight','600');
+  t1.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
+  t1.textContent = n.label;
+  g.appendChild(t1);
+
+  const t2 = document.createElementNS(NS,'text');
+  t2.setAttribute('x', n.x + NW/2); t2.setAttribute('y', n.y + 30);
+  t2.setAttribute('text-anchor','middle');
+  t2.setAttribute('fill','#8b949e'); t2.setAttribute('font-size','9');
+  t2.setAttribute('font-family','-apple-system,BlinkMacSystemFont,sans-serif');
+  t2.textContent = n.sub;
+  g.appendChild(t2);
+
+  nodeEls[n.id] = { g, rect: r, t1, t2 };
+  ng.appendChild(g);
+});
+svg.appendChild(ng);
+
+/* ── View Modes ── */
+let currentMode = 'structure', beamStep = 0;
+
+function applyView() {
+  const info = document.getElementById('trie-info');
+  const beamNav = document.getElementById('beam-nav');
+  beamNav.style.display = currentMode === 'beam' ? 'flex' : 'none';
+
+  nodes.forEach(n => {
+    const el = nodeEls[n.id];
+    let fill = '#1a1f2b', stroke = '#30363d', op = 1, sw = 1;
+    let t1c = '#e6edf3', t2c = '#8b949e';
+
+    if (currentMode === 'pruned' || currentMode === 'beam') {
+      if (n.valid) {
+        stroke = n.leaf ? '#3fb950' : '#58a6ff';
+        fill = n.leaf ? 'rgba(63,185,80,.08)' : 'rgba(88,166,255,.08)';
+      } else {
+        op = .2; stroke = '#30363d'; fill = '#161b22';
+        t1c = '#6e7681'; t2c = '#6e7681';
+      }
+    }
+    if (currentMode === 'beam') {
+      const bs = beamSteps[beamStep];
+      if (bs.tips.includes(n.id)) {
+        fill = 'rgba(210,153,34,.18)'; stroke = '#d29922'; sw = 2.5; op = 1;
+        t1c = '#e6edf3'; t2c = '#d29922';
+      } else if (bs.pathN.includes(n.id)) {
+        fill = 'rgba(88,166,255,.1)'; stroke = '#58a6ff'; sw = 1.5; op = 1;
+        t1c = '#e6edf3'; t2c = '#8b949e';
+      }
+    }
+    el.rect.setAttribute('fill', fill);
+    el.rect.setAttribute('stroke', stroke);
+    el.rect.setAttribute('stroke-width', sw);
+    el.g.style.opacity = op;
+    el.t1.setAttribute('fill', t1c);
+    el.t2.setAttribute('fill', t2c);
+  });
+
+  edges.forEach(([from, to]) => {
+    const eid = `${from}-${to}`;
+    const p = edgeEls[eid];
+    const fv = nodeMap[from].valid, tv = nodeMap[to].valid;
+    let color = '#30363d', op = .6, sw = 1.5, dash = '';
+
+    if (currentMode === 'pruned' || currentMode === 'beam') {
+      if (fv && tv) { color = '#58a6ff'; op = .5; } else { op = .1; dash = '4 3'; }
+    }
+    if (currentMode === 'beam') {
+      const bs = beamSteps[beamStep];
+      if (bs.pathE.includes(eid)) {
+        color = '#d29922'; op = .9; sw = 2.5; dash = '';
+      }
+    }
+    p.setAttribute('stroke', color);
+    p.style.opacity = op;
+    p.setAttribute('stroke-width', sw);
+    p.setAttribute('stroke-dasharray', dash);
+  });
+
+  if (currentMode === 'structure') info.textContent = '22 个节点 / 20 条边 / 5 层。L0 预分配 V=2048 个槽位，此处只显示有 item 的 State 1 和 2。';
+  else if (currentMode === 'pruned') info.textContent = '高亮 = 有效路径，暗淡 = 被 Validity Propagation 剪掉。仅剩 3 条有效路径到达 item a/b, d, e。';
+  else {
+    const bs = beamSteps[beamStep];
+    document.getElementById('beam-label').textContent = bs.label;
+    info.textContent = bs.info.replace(/\n/g, '  |  ');
+  }
+}
+
+/* buttons */
+document.querySelectorAll('.trie-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.trie-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    beamStep = 0;
+    applyView();
+  });
+});
+document.getElementById('beam-prev').addEventListener('click', () => {
+  if (beamStep > 0) { beamStep--; applyView(); }
+});
+document.getElementById('beam-next').addEventListener('click', () => {
+  if (beamStep < beamSteps.length - 1) { beamStep++; applyView(); }
+});
+
+applyView();
+
+/* ═══════════ CSR Interactive ═══════════ */
+const csrEdges = [
+  {par:1,    tok:1, ch:2049},{par:1,    tok:2, ch:2050},
+  {par:2,    tok:3, ch:2051},{par:2,    tok:4, ch:2052},
+  {par:2049, tok:2, ch:2053},{par:2049, tok:5, ch:2054},
+  {par:2050, tok:8, ch:2055},
+  {par:2051, tok:12,ch:2056},
+  {par:2052, tok:17,ch:2057},
+  {par:2053, tok:3, ch:2058},
+  {par:2054, tok:6, ch:2059},
+  {par:2055, tok:9, ch:2060},
+  {par:2056, tok:13,ch:2061},
+  {par:2057, tok:18,ch:2062},
+  {par:2058, tok:4, ch:2063},
+  {par:2059, tok:7, ch:2064},
+  {par:2060, tok:10,ch:2065},{par:2060, tok:11,ch:2066},
+  {par:2061, tok:14,ch:2067},
+  {par:2062, tok:19,ch:2068},
+];
+const csrParents = [...new Set(csrEdges.map(e=>e.par))];
+const csrIndptr = {};
+{
+  let idx = 0;
+  for (const p of csrParents) {
+    const cnt = csrEdges.filter(e=>e.par===p).length;
+    csrIndptr[p] = { start: idx, end: idx + cnt };
+    idx += cnt;
+  }
+}
+
+/* render state picker buttons */
+const picker = document.getElementById('csr-picker');
+picker.innerHTML = '<span class="label">State:</span>';
+csrParents.forEach(p => {
+  const b = document.createElement('button');
+  b.className = 'sbtn';
+  b.dataset.state = p;
+  b.textContent = 'St ' + p;
+  b.onclick = () => selectCSRState(p);
+  picker.appendChild(b);
+});
+
+/* render packed_csr cell strip, grouped by parent */
+const strip = document.getElementById('csr-strip');
+const grpEls = {};
+let ci = 0;
+csrParents.forEach(p => {
+  const grp = document.createElement('div');
+  grp.className = 'grp';
+  grp.dataset.par = p;
+  const lbl = document.createElement('div');
+  lbl.className = 'grp-label';
+  lbl.textContent = 'St ' + p;
+  grp.appendChild(lbl);
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:2px';
+  csrEdges.filter(e=>e.par===p).forEach(e => {
+    const c = document.createElement('div');
+    c.className = 'cc';
+    c.innerHTML = `<div class="ci">#${ci}</div><div class="cv">[${e.tok}, ${e.ch}]</div>`;
+    row.appendChild(c);
+    ci++;
+  });
+  grp.appendChild(row);
+  grpEls[p] = grp;
+  strip.appendChild(grp);
+});
+/* OOB indicator */
+const oob = document.createElement('div');
+oob.className = 'grp';
+oob.innerHTML = '<div class="grp-label" style="color:var(--text-2)">OOB</div><div style="display:flex"><div class="cc" style="width:80px;opacity:.4"><div class="ci">#20~2067</div><div class="cv">[2048, 0]</div></div></div>';
+strip.appendChild(oob);
+
+let activePar = null;
+function selectCSRState(p) {
+  activePar = p;
+  /* highlight buttons */
+  picker.querySelectorAll('.sbtn').forEach(b => b.classList.toggle('on', +b.dataset.state === p));
+  /* highlight groups */
+  Object.entries(grpEls).forEach(([k, el]) => el.classList.toggle('hi', +k === p));
+  /* scroll into view */
+  if (grpEls[p]) grpEls[p].scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+  /* show result */
+  const r = csrIndptr[p];
+  const children = csrEdges.filter(e=>e.par===p);
+  const childStr = children.map(e=>`tok=${e.tok} <span class="step-arrow">→</span> State ${e.ch}`).join('&nbsp;&nbsp;|&nbsp;&nbsp;');
+  document.getElementById('csr-result').innerHTML =
+    `<div class="step-line">1. <code>indptr[${p}]</code> = <b>${r.start}</b> &nbsp; (起始位置)</div>` +
+    `<div class="step-line">2. <code>indptr[${p}+1]</code> = <b>${r.end}</b> &nbsp; (结束位置)</div>` +
+    `<div class="step-line">3. <code>packed_csr[${r.start}:${r.end}]</code> = <b>[${children.map(e=>`[${e.tok},${e.ch}]`).join(', ')}]</b> &nbsp; (${children.length} 条边)</div>` +
+    `<div class="step-result">State ${p} 的子节点: ${childStr}</div>`;
+}
+
+/* ═══════════ Dense Interactive ═══════════ */
+const denseData = {
+  '0,1':{st:2049,items:'a,b,c'},'0,2':{st:2050,items:'d,e'},
+  '1,3':{st:2051,items:'f'},'1,4':{st:2052,items:'g'},
+};
+const denseRows = 6, denseCols = 8;
+const dw = document.getElementById('dense-widget');
+const dGrid = document.createElement('div');
+dGrid.className = 'dense-grid';
+dGrid.style.gridTemplateColumns = `50px repeat(${denseCols}, 70px)`;
+/* corner */
+const corner = document.createElement('div');
+corner.className = 'dc hdr';
+corner.textContent = 't0 \\ t1';
+dGrid.appendChild(corner);
+/* col headers */
+for (let c = 0; c < denseCols; c++) {
+  const h = document.createElement('div');
+  h.className = 'dc hdr';
+  h.textContent = `t1=${c}`;
+  dGrid.appendChild(h);
+}
+/* rows */
+for (let r = 0; r < denseRows; r++) {
+  const rh = document.createElement('div');
+  rh.className = 'dc hdr';
+  rh.textContent = `t0=${r}`;
+  dGrid.appendChild(rh);
+  for (let c = 0; c < denseCols; c++) {
+    const key = `${r},${c}`;
+    const cell = document.createElement('div');
+    if (denseData[key]) {
+      cell.className = 'dc hit';
+      cell.textContent = denseData[key].st;
+      cell.onmouseenter = () => {
+        document.getElementById('dense-tip').innerHTML =
+          `<b>dense_mask[${r}, ${c}] = True</b> → dense_states[${r}, ${c}] = <b style="color:var(--green)">${denseData[key].st}</b> (前缀 (${r},${c}), item ${denseData[key].items})`;
+      };
+      cell.onmouseleave = () => { document.getElementById('dense-tip').textContent = ''; };
+    } else {
+      cell.className = 'dc empty';
+      cell.textContent = r < 2 ? 'F' : '';
+    }
+    dGrid.appendChild(cell);
+  }
+}
+dw.appendChild(dGrid);
+/* start_mask row */
+const smLabel = document.createElement('p');
+smLabel.style.cssText = 'font-size:12px;color:var(--text-1);margin-top:10px';
+smLabel.innerHTML = '<b>start_mask[2048]</b>: 只有 idx <span style="color:var(--green)">0</span> 和 <span style="color:var(--green)">1</span> 为 True (首 token 0 和 1 存在)，其余 2046 个 = False。';
+dw.appendChild(smLabel);
+
+/* ═══════════ Leaf Visual ═══════════ */
+const leafData = [
+  {st:2063, items:['a','b'], ids:[0,1], shared:true},
+  {st:2064, items:['c'],     ids:[2],   shared:false},
+  {st:2065, items:['d'],     ids:[3],   shared:false},
+  {st:2066, items:['e'],     ids:[4],   shared:false},
+  {st:2067, items:['f'],     ids:[5],   shared:false},
+  {st:2068, items:['g'],     ids:[6],   shared:false},
+];
+const lcContainer = document.getElementById('leaf-cards');
+leafData.forEach((lf, i) => {
+  const card = document.createElement('div');
+  card.className = 'lc' + (lf.shared ? ' shared' : '');
+  card.innerHTML =
+    `<div class="lc-st">leaf ${i} / St ${lf.st}</div>` +
+    `<div class="lc-items">${lf.items.join(' + ')}</div>` +
+    `<div class="lc-ids">ids=[${lf.ids.join(',')}]${lf.ids.length < 2 ? ', 0 (pad)' : ''}</div>` +
+    `<div class="lc-ids">valid=[${lf.items.map(()=>'T').join(',')}${lf.ids.length < 2 ? ', F' : ''}]</div>`;
+  lcContainer.appendChild(card);
+});
+
+/* ── TOC active tracking ── */
+const sections = document.querySelectorAll('section[id]');
+const tocLinks = document.querySelectorAll('.sidebar a');
+const tocMap = {};
+tocLinks.forEach(a => { const h = a.getAttribute('href'); if (h) tocMap[h.slice(1)] = a; });
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting && tocMap[e.target.id]) {
+      tocLinks.forEach(a => a.classList.remove('active'));
+      tocMap[e.target.id].classList.add('active');
+    }
+  });
+}, { rootMargin: '-64px 0px -60% 0px', threshold: 0 });
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
