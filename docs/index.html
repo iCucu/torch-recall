@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>torch-recall</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg-0: #f8f6f3; --bg-1: #ffffff; --bg-2: #f2eeea;
@@ -17,6 +17,7 @@
   --yellow: #a08858; --yellow-bg: rgba(160,136,88,.06);
   --purple: #8a7fa0; --purple-bg: rgba(138,127,160,.06);
   --font: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC',sans-serif;
+  --display: 'DM Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
   --mono: 'JetBrains Mono','SF Mono','Fira Code','Menlo',monospace;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -24,12 +25,12 @@ html{scroll-behavior:smooth}
 body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-height:1.75;font-size:16px;min-height:100vh}
 
 /* ── Hero ── */
-.hero{padding:80px 40px 56px;max-width:880px;margin:0 auto}
-.hero-label{font-size:11px;color:var(--text-2);letter-spacing:3px;text-transform:uppercase;font-weight:500;margin-bottom:12px}
-.hero h1{font-size:44px;font-weight:600;letter-spacing:-.8px;margin-bottom:0;color:var(--text-0)}
-.hero h1 .accent{color:var(--accent)}
-.hero-line{width:48px;height:2px;background:var(--accent);opacity:.35;margin:20px 0}
-.hero .sub{font-size:17px;color:var(--text-1);max-width:580px;line-height:1.7;margin-bottom:28px}
+.hero{padding:80px 40px 56px;max-width:920px;margin:0 auto}
+.hero-label{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:2px;font-weight:400;margin-bottom:16px;opacity:.7}
+.hero h1{font-family:var(--display);font-size:46px;font-weight:300;letter-spacing:-.5px;margin-bottom:0;color:var(--text-0);line-height:1.15}
+.hero h1 b{font-weight:500}
+.hero-line{width:40px;height:1.5px;background:var(--accent);opacity:.4;margin:22px 0}
+.hero .sub{font-size:16px;color:var(--text-1);max-width:580px;line-height:1.8;margin-bottom:28px}
 .hero .badges{display:flex;gap:8px;flex-wrap:wrap}
 .badge{font-size:12px;padding:3px 12px;border-radius:99px;font-weight:500;border:1px solid}
 .badge.py{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -37,31 +38,40 @@ body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-hei
 .badge.cpp{border-color:var(--green);color:var(--green);background:var(--green-bg)}
 
 /* ── Layout ── */
-.container{max-width:880px;margin:0 auto;padding:0 40px 80px}
+.container{max-width:920px;margin:0 auto;padding:0 40px 80px}
 section{margin-bottom:72px}
-.sec-num{font-size:80px;font-weight:300;color:var(--accent);opacity:.10;line-height:.8;letter-spacing:-4px;display:block;user-select:none;pointer-events:none}
-h2{font-size:28px;font-weight:600;margin:-8px 0 24px;padding:0;border:none;letter-spacing:-.3px}
-p{color:var(--text-1);font-size:16px;margin-bottom:14px;max-width:680px}
+.sec-header{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+.sec-label{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:400;flex-shrink:0;opacity:.65}
+.sec-dash{width:28px;height:1px;background:var(--accent);opacity:.3;flex-shrink:0}
+h2{font-family:var(--display);font-size:28px;font-weight:400;margin:0;padding:0;border:none;letter-spacing:-.2px;color:var(--text-0)}
+p{color:var(--text-1);font-size:16px;margin-bottom:14px;max-width:700px}
 code{font-family:var(--mono);font-size:.88em;background:var(--bg-2);padding:2px 6px;border-radius:4px}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 
+/* ── Signature Box ── */
+.sig-box{display:inline-block;background:var(--bg-1);border:1px solid var(--border-light);border-radius:8px;padding:10px 20px;font-family:var(--mono);font-size:13px;color:var(--text-1);margin:8px 0 20px}
+.sig-box .kw{color:var(--purple)}
+.sig-box .fn{color:var(--accent);font-weight:600}
+.sig-box .ty{color:var(--green)}
+
 /* ── Architecture SVG ── */
-.arch-svg{width:100%;max-width:660px;display:block;margin:28px 0}
-.arch-svg text{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif}
+.arch-svg{width:100%;max-width:720px;display:block;margin:24px auto 0}
+.arch-svg text{font-family:'DM Sans','Inter',-apple-system,sans-serif}
 .arch-svg text.mono{font-family:'JetBrains Mono','SF Mono','Fira Code',monospace}
+.arch-caption{font-size:13px;color:var(--text-2);text-align:center;margin:16px 0 0;font-style:italic}
 
 /* ── Method List ── */
 .method-list{margin:8px 0}
-.ml{padding:28px 0;border-bottom:1px solid var(--border-light)}
+.ml{padding:26px 0;border-bottom:1px solid var(--border-light)}
 .ml:first-child{padding-top:0}
 .ml:last-child{border-bottom:none;padding-bottom:0}
 .ml-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.ml-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.ml-name{font-size:20px;font-weight:600;letter-spacing:-.1px}
-.ml-en{font-size:13px;color:var(--text-2);font-weight:400;margin-left:4px}
-.ml-desc{font-size:15px;color:var(--text-1);margin-bottom:10px;max-width:560px;padding-left:18px}
-.ml-links{display:flex;gap:16px;padding-left:18px}
+.ml-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;opacity:.7}
+.ml-name{font-family:var(--display);font-size:20px;font-weight:500;letter-spacing:-.1px}
+.ml-en{font-size:13px;color:var(--text-2);font-weight:400;margin-left:6px}
+.ml-desc{font-size:15px;color:var(--text-1);margin-bottom:10px;max-width:580px;padding-left:17px}
+.ml-links{display:flex;gap:16px;padding-left:17px}
 .ml-links a{font-size:13px;color:var(--accent);font-weight:500}
 .ml-links .star{color:var(--yellow)}
 .ml-links .muted{font-size:13px;color:var(--text-2)}
@@ -71,14 +81,13 @@ a:hover{text-decoration:underline}
 .combo{padding:18px 22px;border:1px solid var(--border-light);border-radius:10px;background:var(--bg-1)}
 .combo-label{font-size:12px;color:var(--text-2);margin-bottom:10px;font-weight:500;letter-spacing:.2px}
 .combo-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.cn{padding:4px 12px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid var(--border-light);background:var(--bg-2);color:var(--text-1)}
-.cn.op{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);font-weight:600}
-.cn.ye{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-bg)}
-.cn.gr{border-color:var(--green);color:var(--green);background:var(--green-bg)}
-.cn.rd{border-color:var(--red);color:var(--red);background:var(--red-bg)}
-.cn.pu{border-color:var(--purple);color:var(--purple);background:var(--purple-bg)}
+.cn{padding:4px 12px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid var(--border-light);background:var(--bg-1);color:var(--text-1)}
+.cn.op{border-color:var(--accent);color:var(--accent);font-weight:600}
+.cn.m-t{color:var(--yellow)}
+.cn.m-k{color:var(--green)}
+.cn.m-g{color:var(--red)}
 .ca{color:var(--text-2);font-size:14px;user-select:none}
-.ca-sm{font-size:10px;color:var(--text-2);padding:0 2px}
+.ca-sm{font-size:10px;color:var(--text-2);padding:0 1px}
 
 /* ── Quick Start ── */
 .code-block{font-family:var(--mono);font-size:13px;color:var(--text-1);line-height:2;padding:22px 26px;background:var(--bg-1);border:1px solid var(--border-light);border-radius:10px;margin:16px 0;overflow-x:auto;white-space:pre}
@@ -86,14 +95,13 @@ a:hover{text-decoration:underline}
 .code-block .cmd{color:var(--text-0)}
 
 /* ── Footer ── */
-.footer{text-align:center;padding:40px 0;font-size:13px;color:var(--text-2);border-top:1px solid var(--border-light);max-width:880px;margin:0 auto}
+.footer{text-align:center;padding:40px 0;font-size:13px;color:var(--text-2);border-top:1px solid var(--border-light);max-width:920px;margin:0 auto}
 
 @media(max-width:600px){
   .hero{padding:48px 20px 36px}
-  .hero h1{font-size:30px}
+  .hero h1{font-size:32px}
   .container{padding:0 20px 60px}
-  .sec-num{font-size:56px}
-  h2{font-size:22px}
+  h2{font-size:23px}
   .arch-svg{max-width:100%}
   .ml-name{font-size:17px}
 }
@@ -102,10 +110,11 @@ a:hover{text-decoration:underline}
 <body>
 
 <div class="hero">
-  <div class="hero-label">documentation</div>
-  <h1>torch<span class="accent">-</span>recall</h1>
+  <div class="hero-label">// documentation</div>
+  <h1><b>torch</b>-recall</h1>
   <div class="hero-line"></div>
-  <p class="sub">基于 PyTorch 的召回框架。统一的 <code>RecallOp</code> 接口，声明式组合，AOTInductor 导出。</p>
+  <p class="sub">基于 PyTorch 的召回框架。统一的 <code>RecallOp</code> 接口，
+    声明式 <code>And / Or</code> 组合，AOTInductor 导出 <code>.pt2</code> 模型包。</p>
   <div class="badges">
     <span class="badge py">Python ≥ 3.10</span>
     <span class="badge torch">PyTorch</span>
@@ -117,46 +126,95 @@ a:hover{text-decoration:underline}
 
 <!-- ── 01 架构 ── -->
 <section id="arch">
-  <div class="sec-num">01</div>
-  <h2>架构</h2>
-  <p>所有召回方法继承 <code>RecallOp(nn.Module)</code>，共享同一 <code>forward</code> 签名，可通过 <code>And / Or</code> 任意组合并编译导出。</p>
+  <div class="sec-header">
+    <span class="sec-label">01</span>
+    <span class="sec-dash"></span>
+    <h2>架构</h2>
+  </div>
+  <p>所有召回方法继承 <code>RecallOp(nn.Module)</code>，共享统一的 <code>forward</code> 签名。
+    通过 <code>And</code>（交集 / 分数求和）与 <code>Or</code>（并集 / 分数取 max）声明式组合为 Pipeline，编译导出为单一 <code>.pt2</code> 模型包。</p>
+  <div class="sig-box">
+    <span class="kw">class</span> <span class="fn">RecallOp</span>(nn.Module):<br>
+    &nbsp;&nbsp;<span class="kw">def</span> <span class="fn">forward</span>(self, pred: <span class="ty">Tensor[B,P]</span>, query: <span class="ty">Tensor[B,D]</span>) → <span class="ty">Tensor[B,N]</span>
+  </div>
 
-  <svg class="arch-svg" viewBox="0 0 660 228" fill="none">
-    <!-- RecallOp -->
-    <rect x="170" y="12" width="320" height="64" rx="10" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.4"/>
-    <text x="330" y="38" text-anchor="middle" font-size="17" font-weight="600" fill="var(--text-0)">RecallOp</text>
-    <text x="330" y="58" text-anchor="middle" class="mono" font-size="11" fill="var(--text-2)">forward(pred, query) → scores</text>
-    <!-- Branch -->
-    <line x1="330" y1="76" x2="330" y2="108" stroke="var(--border)" stroke-width="1.3"/>
-    <line x1="110" y1="108" x2="550" y2="108" stroke="var(--border)" stroke-width="1.3"/>
-    <line x1="110" y1="108" x2="110" y2="138" stroke="var(--border)" stroke-width="1.3"/>
-    <line x1="330" y1="108" x2="330" y2="138" stroke="var(--border)" stroke-width="1.3"/>
-    <line x1="550" y1="108" x2="550" y2="138" stroke="var(--border)" stroke-width="1.3"/>
-    <circle cx="110" cy="108" r="2.5" fill="var(--border)"/>
-    <circle cx="330" cy="108" r="2.5" fill="var(--border)"/>
-    <circle cx="550" cy="108" r="2.5" fill="var(--border)"/>
-    <polygon points="110,144 106,136 114,136" fill="var(--border)"/>
-    <polygon points="330,144 326,136 334,136" fill="var(--border)"/>
-    <polygon points="550,144 546,136 554,136" fill="var(--border)"/>
-    <!-- Targeting -->
-    <rect x="30" y="148" width="160" height="56" rx="8" fill="var(--yellow-bg)" stroke="var(--yellow)" stroke-width="1.2"/>
-    <text x="110" y="172" text-anchor="middle" font-size="14" font-weight="600" fill="var(--text-0)">Targeting</text>
-    <text x="110" y="190" text-anchor="middle" font-size="11" fill="var(--text-2)">布尔规则匹配</text>
-    <!-- KNN -->
-    <rect x="250" y="148" width="160" height="56" rx="8" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1.2"/>
-    <text x="330" y="172" text-anchor="middle" font-size="14" font-weight="600" fill="var(--text-0)">KNN</text>
-    <text x="330" y="190" text-anchor="middle" font-size="11" fill="var(--text-2)">向量相似度</text>
+  <svg class="arch-svg" viewBox="0 0 720 396" fill="none">
+    <!-- Pipeline dashed box -->
+    <rect x="18" y="10" width="684" height="266" rx="12" fill="none" stroke="var(--border)" stroke-width="1.2" stroke-dasharray="6 4"/>
+    <text x="360" y="30" text-anchor="middle" font-size="11" font-weight="500" fill="var(--text-2)" letter-spacing="1.5">PIPELINE</text>
+
+    <!-- Or node -->
+    <rect x="316" y="44" width="88" height="38" rx="8" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.3"/>
+    <text x="360" y="68" text-anchor="middle" font-size="14" font-weight="500" fill="var(--accent)">Or</text>
+
+    <!-- Curves: Or → And_L, Or → And_R -->
+    <path d="M340,82 C340,104 200,104 200,120" stroke="var(--border)" stroke-width="1.2" fill="none"/>
+    <path d="M380,82 C380,104 520,104 520,120" stroke="var(--border)" stroke-width="1.2" fill="none"/>
+
+    <!-- And Left -->
+    <rect x="156" y="120" width="88" height="38" rx="8" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.3"/>
+    <text x="200" y="144" text-anchor="middle" font-size="14" font-weight="500" fill="var(--accent)">And</text>
+
+    <!-- And Right -->
+    <rect x="476" y="120" width="88" height="38" rx="8" fill="var(--bg-1)" stroke="var(--accent)" stroke-width="1.3"/>
+    <text x="520" y="144" text-anchor="middle" font-size="14" font-weight="500" fill="var(--accent)">And</text>
+
+    <!-- Curves: And_L → Targeting, And_L → KNN -->
+    <path d="M180,158 C180,178 116,178 116,196" stroke="var(--border)" stroke-width="1.1" fill="none"/>
+    <path d="M220,158 C220,178 284,178 284,196" stroke="var(--border)" stroke-width="1.1" fill="none"/>
+
+    <!-- Curves: And_R → Targeting, And_R → Generative -->
+    <path d="M500,158 C500,178 440,178 440,196" stroke="var(--border)" stroke-width="1.1" fill="none"/>
+    <path d="M540,158 C540,178 604,178 604,196" stroke="var(--border)" stroke-width="1.1" fill="none"/>
+
+    <!-- Targeting 1 -->
+    <rect x="52" y="196" width="128" height="46" rx="7" fill="var(--bg-1)" stroke="var(--border)" stroke-width="1"/>
+    <circle cx="76" cy="214" r="3.5" fill="var(--yellow)" opacity=".7"/>
+    <text x="90" y="218" font-size="13" font-weight="500" fill="var(--text-0)">Targeting</text>
+    <text x="116" y="234" text-anchor="middle" font-size="10" fill="var(--text-2)">定向过滤</text>
+
+    <!-- KNN cosine -->
+    <rect x="220" y="196" width="128" height="46" rx="7" fill="var(--bg-1)" stroke="var(--border)" stroke-width="1"/>
+    <circle cx="244" cy="214" r="3.5" fill="var(--green)" opacity=".7"/>
+    <text x="258" y="218" font-size="13" font-weight="500" fill="var(--text-0)">KNN</text>
+    <text x="284" y="234" text-anchor="middle" class="mono" font-size="10" fill="var(--text-2)">cosine</text>
+
+    <!-- Targeting 2 -->
+    <rect x="376" y="196" width="128" height="46" rx="7" fill="var(--bg-1)" stroke="var(--border)" stroke-width="1"/>
+    <circle cx="400" cy="214" r="3.5" fill="var(--yellow)" opacity=".7"/>
+    <text x="414" y="218" font-size="13" font-weight="500" fill="var(--text-0)">Targeting</text>
+    <text x="440" y="234" text-anchor="middle" font-size="10" fill="var(--text-2)">定向过滤</text>
+
     <!-- Generative -->
-    <rect x="470" y="148" width="160" height="56" rx="8" fill="var(--red-bg)" stroke="var(--red)" stroke-width="1.2"/>
-    <text x="550" y="172" text-anchor="middle" font-size="14" font-weight="600" fill="var(--text-0)">Generative</text>
-    <text x="550" y="190" text-anchor="middle" font-size="11" fill="var(--text-2)">Trie + Beam Search</text>
+    <rect x="540" y="196" width="140" height="46" rx="7" fill="var(--bg-1)" stroke="var(--border)" stroke-width="1"/>
+    <circle cx="564" cy="214" r="3.5" fill="var(--red)" opacity=".7"/>
+    <text x="578" y="218" font-size="13" font-weight="500" fill="var(--text-0)">Generative</text>
+    <text x="610" y="234" text-anchor="middle" class="mono" font-size="10" fill="var(--text-2)">beam=10</text>
+
+    <!-- Output: vertical from Pipeline box -->
+    <line x1="360" y1="276" x2="360" y2="302" stroke="var(--border)" stroke-width="1.2"/>
+    <polygon points="360,306 356,298 364,298" fill="var(--border)"/>
+
+    <!-- topk box -->
+    <rect x="310" y="310" width="100" height="34" rx="7" fill="var(--bg-1)" stroke="var(--purple)" stroke-width="1.2"/>
+    <text x="360" y="332" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple)">topk(50)</text>
+
+    <!-- Final output -->
+    <line x1="360" y1="344" x2="360" y2="362" stroke="var(--border)" stroke-width="1.2"/>
+    <polygon points="360,366 356,358 364,358" fill="var(--border)"/>
+    <text x="360" y="386" text-anchor="middle" class="mono" font-size="12" fill="var(--text-1)">scores [B, 50]</text>
+    <text x="360" y="396" text-anchor="middle" font-size="10" fill="var(--text-2)">→ .pt2 export</text>
   </svg>
+  <p class="arch-caption">示例：Or( And(Targeting, KNN<sub>cosine</sub>), And(Targeting, Generative<sub>beam=10</sub>) ) → topk(50)</p>
 </section>
 
 <!-- ── 02 召回方法 ── -->
 <section id="methods">
-  <div class="sec-num">02</div>
-  <h2>召回方法</h2>
+  <div class="sec-header">
+    <span class="sec-label">02</span>
+    <span class="sec-dash"></span>
+    <h2>召回方法</h2>
+  </div>
   <div class="method-list">
 
     <div class="ml">
@@ -165,7 +223,7 @@ a:hover{text-decoration:underline}
         <span class="ml-name">Targeting</span>
         <span class="ml-en">定向召回</span>
       </div>
-      <div class="ml-desc">布尔规则精确匹配，根据用户属性过滤 item。</div>
+      <div class="ml-desc">布尔规则精确匹配，根据用户属性过滤 item。支持 <code>==</code> <code>!=</code> <code>></code> <code>contains</code> 等运算符。</div>
       <div class="ml-links"><a href="targeting/walkthrough.md">端到端示例 →</a></div>
     </div>
 
@@ -175,7 +233,7 @@ a:hover{text-decoration:underline}
         <span class="ml-name">KNN</span>
         <span class="ml-en">近邻召回</span>
       </div>
-      <div class="ml-desc">向量相似度检索，支持内积、余弦、L2 距离。</div>
+      <div class="ml-desc">向量相似度检索，brute-force matmul 计算内积、余弦或 L2 距离。</div>
       <div class="ml-links"><span class="muted">文档编写中</span></div>
     </div>
 
@@ -197,51 +255,39 @@ a:hover{text-decoration:underline}
 
 <!-- ── 03 组合 ── -->
 <section id="compose">
-  <div class="sec-num">03</div>
-  <h2>声明式组合</h2>
-  <p>通过 <code>And</code>（交集）与 <code>Or</code>（并集）组合任意召回方法，编译为单一 <code>.pt2</code> 模型。</p>
-
-  <svg class="arch-svg" viewBox="0 0 660 72" fill="none" style="margin:28px 0 32px">
-    <rect x="0" y="16" width="104" height="40" rx="8" fill="none" stroke="var(--border)" stroke-width="1.2"/>
-    <text x="52" y="40" text-anchor="middle" class="mono" font-size="11" fill="var(--text-2)">pred, query</text>
-    <text x="122" y="40" text-anchor="middle" font-size="15" fill="var(--text-2)">→</text>
-    <rect x="140" y="16" width="100" height="40" rx="8" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.2"/>
-    <text x="190" y="40" text-anchor="middle" font-size="13" font-weight="600" fill="var(--accent)">And / Or</text>
-    <text x="258" y="40" text-anchor="middle" font-size="15" fill="var(--text-2)">→</text>
-    <rect x="276" y="16" width="120" height="40" rx="8" fill="var(--bg-2)" stroke="var(--border)" stroke-width="1.2"/>
-    <text x="336" y="40" text-anchor="middle" font-size="12" font-weight="500" fill="var(--text-0)">RecallOp × N</text>
-    <text x="414" y="40" text-anchor="middle" font-size="15" fill="var(--text-2)">→</text>
-    <rect x="432" y="16" width="80" height="40" rx="8" fill="var(--purple-bg)" stroke="var(--purple)" stroke-width="1.2"/>
-    <text x="472" y="40" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple)">topk(K)</text>
-    <text x="530" y="40" text-anchor="middle" font-size="15" fill="var(--text-2)">→</text>
-    <rect x="548" y="16" width="112" height="40" rx="8" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1.2"/>
-    <text x="604" y="40" text-anchor="middle" class="mono" font-size="11" fill="var(--green)">scores [B, K]</text>
-  </svg>
+  <div class="sec-header">
+    <span class="sec-label">03</span>
+    <span class="sec-dash"></span>
+    <h2>声明式组合</h2>
+  </div>
+  <p>通过 <code>And</code>（交集 / 分数求和）与 <code>Or</code>（并集 / 分数取 max）组合任意召回方法，
+    支持嵌套，编译为单一 <code>.pt2</code> 模型。</p>
 
   <div class="combo-list">
     <div class="combo">
       <div class="combo-label">定向过滤 + 语义排序</div>
       <div class="combo-flow">
         <span class="cn op">And</span><span class="ca">(</span>
-        <span class="cn ye">Targeting</span><span class="ca">,</span>
-        <span class="cn gr">KNN</span><span class="ca">)</span>
+        <span class="cn m-t">Targeting</span><span class="ca">,</span>
+        <span class="cn m-k">KNN</span><span class="ca">)</span>
       </div>
     </div>
     <div class="combo">
-      <div class="combo-label">多路向量检索</div>
+      <div class="combo-label">多路向量检索取并集</div>
       <div class="combo-flow">
         <span class="cn op">Or</span><span class="ca">(</span>
-        <span class="cn gr">KNN</span><span class="ca-sm">cosine</span><span class="ca">,</span>
-        <span class="cn gr">KNN</span><span class="ca-sm">l2</span><span class="ca">)</span>
+        <span class="cn m-k">KNN</span><span class="ca-sm">cosine</span><span class="ca">,</span>
+        <span class="cn m-k">KNN</span><span class="ca-sm">l2</span><span class="ca">)</span>
       </div>
     </div>
     <div class="combo">
-      <div class="combo-label">复杂嵌套</div>
+      <div class="combo-label">复杂嵌套 — 多路召回 + 生成式</div>
       <div class="combo-flow">
         <span class="cn op">Or</span><span class="ca">(</span>
-        <span class="cn op" style="font-size:11px">And</span><span class="ca">(</span><span class="cn ye">Targeting</span><span class="ca">,</span>
-        <span class="cn gr">KNN</span><span class="ca">)</span><span class="ca">,</span>
-        <span class="cn rd">Generative</span><span class="ca">)</span>
+        <span class="cn op" style="font-size:12px">And</span><span class="ca">(</span><span class="cn m-t">Targeting</span><span class="ca">,</span>
+        <span class="cn m-k">KNN</span><span class="ca-sm">cosine</span><span class="ca">)</span><span class="ca">,</span>
+        <span class="cn op" style="font-size:12px">And</span><span class="ca">(</span><span class="cn m-t">Targeting</span><span class="ca">,</span>
+        <span class="cn m-g">Generative</span><span class="ca">)</span><span class="ca">)</span>
       </div>
     </div>
   </div>
@@ -249,8 +295,11 @@ a:hover{text-decoration:underline}
 
 <!-- ── 04 快速开始 ── -->
 <section id="quickstart">
-  <div class="sec-num">04</div>
-  <h2>快速开始</h2>
+  <div class="sec-header">
+    <span class="sec-label">04</span>
+    <span class="sec-dash"></span>
+    <h2>快速开始</h2>
+  </div>
   <div class="code-block"><span class="cm"># 环境准备</span>
 <span class="cmd">git clone git@github.com:iCucu/torch-recall.git && cd torch-recall</span>
 <span class="cmd">uv venv --python 3.12 .venv && source .venv/bin/activate</span>
