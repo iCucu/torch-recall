@@ -207,7 +207,14 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .tc .tc-usage .utip{color:var(--text-2);font-size:10px;margin-top:4px}
 
 /* ── Beam Search Interactive ── */
-.bs-wrap{margin:16px 0}
+.bs-banner{margin:14px 0 8px;padding:16px 18px 14px;border:1px solid var(--accent);border-radius:12px;background:linear-gradient(180deg,var(--accent-bg) 0%,var(--bg-card) 60%);position:relative;box-shadow:0 2px 14px rgba(166,124,82,.08)}
+.bs-banner-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--border-light)}
+.bs-star{font-size:18px;color:var(--accent);line-height:1}
+.bs-banner-ttl{font-size:17px;font-weight:700;color:var(--accent);letter-spacing:.5px}
+.bs-banner-sub{font-size:13px;color:var(--text-1);font-weight:500}
+.bs-banner-hint{font-size:12px;color:var(--text-2);margin-top:10px;padding-top:8px;border-top:1px dashed var(--border-light)}
+.bs-banner-hint a{color:var(--accent);text-decoration:underline}
+.bs-wrap{margin:6px 0 0}
 .bs-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .bs-nav .bs-auto{margin-left:auto;font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-family:var(--font)}
 .bs-nav .bs-auto:hover{border-color:var(--text-2);color:var(--text-0)}
@@ -582,11 +589,25 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
   </div>
 
   <h3 id="phase3">Phase 3: Beam Search (beam_width=3)</h3>
-  <p>每步对 <code>beam × children</code> 所有候选做全局 topk。Step 0~1 用 <b>Dense 表</b> O(1) 查询；Step 2~4 用 <b>CSR burst-read</b>。
+
+  <div class="bs-banner">
+    <div class="bs-banner-hd">
+      <span class="bs-star">★</span>
+      <span class="bs-banner-ttl">交互式示例</span>
+      <span class="bs-banner-sub">点击 Tab 逐步查看每一步的 tensor 计算，或按 ▶ 自动播放</span>
+    </div>
+    <div class="bs-wrap">
+      <div class="bs-nav" id="bs-nav"></div>
+      <div class="bs-panel" id="bs-panel"></div>
+    </div>
+    <div class="bs-banner-hint">→ 搭配 <a href="#trie">最上方 Trie 的「Beam Search 动画」</a>按钮，可同时看到搜索路径在 Trie 上的轨迹</div>
+  </div>
+
+  <p style="margin-top:22px">每步对 <code>beam × children</code> 所有候选做全局 topk。Step 0~1 用 <b>Dense 表</b> O(1) 查询；Step 2~4 用 <b>CSR burst-read</b>。
     每步都被 <b>两重 mask</b> 过滤：(1) 结构合法性 (dense_mask / struct_ok)；(2) 剪枝有效性 (node_valid)。</p>
 
   <details style="margin:8px 0 14px;font-size:13px">
-    <summary style="cursor:pointer;color:var(--accent);font-weight:600">▸ 总览表格 (点击展开)</summary>
+    <summary style="cursor:pointer;color:var(--accent);font-weight:600">▸ 五步总览表格 (点击展开)</summary>
     <div class="tbl-wrap" style="margin-top:8px"><table class="beam-table">
       <tr><th>Step</th><th>方法</th><th>Beam 0</th><th>Beam 1</th><th>Beam 2</th></tr>
       <tr><td>0</td><td>首 token</td><td class="tip">tok=0 → St 1  (-0.5)</td><td class="inf">-inf</td><td class="inf">-inf</td></tr>
@@ -596,13 +617,6 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
       <tr><td>4</td><td>CSR (叶)</td><td class="tip">tok=10 → St 2065 [d]  (-1.7)</td><td>tok=11 → St 2066 [e]  (-2.1)</td><td>tok=4 → St 2063 [a,b]  (-2.8)</td></tr>
     </table></div>
   </details>
-
-  <p style="color:var(--text-0);font-weight:600;margin-top:8px;font-size:13px">🔍 逐步交互 — 选择某一步查看完整计算过程</p>
-  <div class="bs-wrap">
-    <div class="bs-nav" id="bs-nav"></div>
-    <div class="bs-panel" id="bs-panel"></div>
-  </div>
-  <p class="desc" style="color:var(--accent);margin-top:8px">→ 点击 <a href="#trie" style="color:var(--accent);text-decoration:underline">最上方 Trie 的「Beam Search 动画」</a>按钮可同时看到搜索路径在 Trie 上的轨迹</p>
 
   <h3 id="phase4">Phase 4: Resolve Leaves</h3>
   <p>叶子 state 通过 <code>leaf_item_ids</code> 映射回 item index，用 <code>scatter_reduce(amax)</code> 聚合分数。
