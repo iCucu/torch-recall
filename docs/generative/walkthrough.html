@@ -208,12 +208,68 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 
 /* ── Beam Search Interactive ── */
 .bs-banner{margin:14px 0 8px;padding:16px 18px 14px;border:1px solid var(--accent);border-radius:12px;background:linear-gradient(180deg,var(--accent-bg) 0%,var(--bg-card) 60%);position:relative;box-shadow:0 2px 14px rgba(166,124,82,.08)}
+
+/* Sub-phase controller */
+.bs-subctl{display:flex;align-items:center;gap:12px;margin:10px 0 14px;padding:10px 14px;background:var(--bg-2);border-radius:8px;border:1px solid var(--border-light);flex-wrap:wrap}
+.bs-subbtn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-size:12px;font-family:var(--font);transition:all .15s}
+.bs-subbtn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.bs-subbtn:disabled{opacity:.3;cursor:not-allowed}
+.bs-subdots{display:flex;gap:6px;align-items:center}
+.bs-subdot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .3s}
+.bs-subdot.on{background:var(--accent);transform:scale(1.4);box-shadow:0 0 8px rgba(166,124,82,.4)}
+.bs-subdot.done{background:var(--green)}
+.bs-caption{flex:1;min-width:220px;font-size:13px;color:var(--accent);font-weight:600;line-height:1.5;padding-left:6px}
+.bs-caption .nar{font-size:11px;color:var(--text-2);font-weight:500;display:block;margin-top:1px;letter-spacing:.3px}
+
+/* Section entry animation */
+.bs-sec{transition:opacity .4s ease}
+.bs-sec.hidden{display:none}
+.bs-sec.entering{animation:bsFadeUp .5s ease}
+@keyframes bsFadeUp{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* Row stagger animation */
+.bs-tbl tr.row-in{animation:bsSlideIn .35s ease backwards}
+@keyframes bsSlideIn{
+  from{opacity:0;transform:translateX(-10px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+/* Winner glow pulsing */
+@keyframes bsGlow{
+  0%,100%{box-shadow:0 0 0 rgba(138,143,104,.15)}
+  50%{box-shadow:0 0 18px rgba(138,143,104,.55)}
+}
+.bs-pulse{animation:bsGlow 1.6s ease-in-out infinite}
+
+/* Mask flash (shake then fade red) */
+@keyframes bsMask{
+  0%{background:transparent}
+  30%{background:rgba(176,106,96,.25)}
+  100%{background:rgba(176,106,96,.06)}
+}
+.bs-tbl tr.msk.flash td{animation:bsMask 1.1s ease}
+
+/* Arrow pulsing while waiting */
+@keyframes bsArrowPulse{
+  0%,100%{opacity:.35;transform:translateY(0)}
+  50%{opacity:.9;transform:translateY(4px)}
+}
+.bs-arrow.pulsing{animation:bsArrowPulse 1.3s ease-in-out infinite;color:var(--accent);font-weight:700}
+
+/* Score reveal counter */
+.bs-tbl .score-reveal{opacity:0;animation:bsFadeUp .5s ease forwards}
+
+
 .bs-banner-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--border-light)}
 .bs-star{font-size:18px;color:var(--accent);line-height:1}
 .bs-banner-ttl{font-size:17px;font-weight:700;color:var(--accent);letter-spacing:.5px}
 .bs-banner-sub{font-size:13px;color:var(--text-1);font-weight:500}
 .bs-banner-hint{font-size:12px;color:var(--text-2);margin-top:10px;padding-top:8px;border-top:1px dashed var(--border-light)}
 .bs-banner-hint a{color:var(--accent);text-decoration:underline}
+.bs-banner-sub kbd{display:inline-block;padding:1px 6px;margin:0 1px;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;background:var(--bg-1);font:600 11px var(--font);color:var(--accent)}
 .bs-wrap{margin:6px 0 0}
 .bs-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .bs-nav .bs-auto{margin-left:auto;font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-family:var(--font)}
@@ -594,7 +650,7 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
     <div class="bs-banner-hd">
       <span class="bs-star">★</span>
       <span class="bs-banner-ttl">交互式示例</span>
-      <span class="bs-banner-sub">点击 Tab 逐步查看每一步的 tensor 计算，或按 ▶ 自动播放</span>
+      <span class="bs-banner-sub">每一步拆成 3~4 个<b>子步</b>渐进呈现 — 用 <kbd>◀ / ▶</kbd> 单步走，或按 <b>▶ 自动播放</b> 一键浏览全流程</span>
     </div>
     <div class="bs-wrap">
       <div class="bs-nav" id="bs-nav"></div>
@@ -1682,11 +1738,28 @@ const BS_STEPS = [
 
 function escHTML(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+/* Sub-phase captions for the narrator. Each step has 3 or 4 substeps. */
+const SUB_WITH_INPUT = [
+  { ttl: '接收上一步的 beam', nar: '输入：[B, beam] 个 state + 累积 score + 已选 path' },
+  { ttl: '枚举每个 beam 的子节点并应用双重 mask', nar: 'struct_ok (结构存在) AND node_valid (剪枝后有效) — 任一为 F 就 -inf' },
+  { ttl: '累积分数后全局 topk(beam)', nar: 'cand = beam_score + lp；在 B × (beam × 候选) 空间上竞争' },
+  { ttl: '得到下一步的 beam', nar: '新 state + 新 score + 写入 path[step]' },
+];
+const SUB_NO_INPUT = [
+  { ttl: '在整个词表 V 上筛合法首 token', nar: 'start_mask (Trie 存在) AND node_valid[1:V+1] (剪枝后有效)' },
+  { ttl: '对 decoder lp 做 topk(beam)', nar: '不合法的 token 分数 = -inf，topk 永远选不到' },
+  { ttl: '得到初始 beam', nar: 'beam_states = top_tok + 1 (L0 规则)' },
+];
+
+function subCount(s){ return s.inputs ? 4 : 3; }
+function subInfo(s, n){ return (s.inputs ? SUB_WITH_INPUT : SUB_NO_INPUT)[n]; }
+
 function renderBeamStep(i) {
   const s = BS_STEPS[i];
   const root = document.getElementById('bs-panel');
   const parts = [];
 
+  // header
   parts.push(`<div class="bs-hd">
     <span class="ttl">${s.title}</span>
     <span class="mth">${s.method}</span>
@@ -1695,9 +1768,22 @@ function renderBeamStep(i) {
   parts.push(`<div class="bs-desc">${s.desc}</div>`);
   parts.push(`<div class="bs-formula">${s.formula}</div>`);
 
+  // sub-phase controller
+  const nSub = subCount(s);
+  parts.push(`<div class="bs-subctl">
+    <button class="bs-subbtn" id="bs-sub-prev">◀ 上一步</button>
+    <div class="bs-subdots" id="bs-subdots">
+      ${Array.from({length:nSub}, (_,k)=>`<span class="bs-subdot" data-k="${k}"></span>`).join('')}
+    </div>
+    <div class="bs-caption" id="bs-caption"></div>
+    <button class="bs-subbtn" id="bs-sub-next">下一步 ▶</button>
+  </div>`);
+
+  // sub 1 (or 0 when no-input): input cards — only if inputs defined
+  let subIdx = 0;
   if (s.inputs) {
-    parts.push(`<div class="bs-sec">
-      <div class="bs-sec-lbl"><span class="num">1</span>输入 beam</div>
+    parts.push(`<div class="bs-sec" data-sub="${subIdx}">
+      <div class="bs-sec-lbl"><span class="num">${subIdx+1}</span>输入 beam</div>
       <div class="bs-cards">
         ${s.inputs.map(c => `
           <div class="bs-card">
@@ -1708,36 +1794,39 @@ function renderBeamStep(i) {
         `).join('')}
       </div>
     </div>`);
+    subIdx++;
+    parts.push(`<div class="bs-arrow" data-arrow-for="${subIdx}">↓ 查子节点 (dense_mask / csr_indptr)</div>`);
   }
 
-  const childStepNum = s.inputs ? 2 : 1;
-  parts.push(`<div class="bs-sec">
-    <div class="bs-sec-lbl"><span class="num">${childStepNum}</span>枚举子节点 · 算 beam_score + lp · 双重 mask</div>
+  // enumerate + double mask
+  parts.push(`<div class="bs-sec" data-sub="${subIdx}">
+    <div class="bs-sec-lbl"><span class="num">${subIdx+1}</span>枚举子节点 · 双重 mask (struct_ok &amp; node_valid)</div>
     <div class="bs-beams">`);
   for (const beam of s.beams) {
     parts.push(`<div class="bs-beam">
       <div class="bb-hd">${escHTML(beam.label)}</div>
       ${beam.note ? `<div class="bb-note">${beam.note}</div>` : ''}
       <table class="bs-tbl">
-        <tr>${(beam.rows[0].tok !== undefined ? ['token', ...beam.cols.slice(1)] : beam.cols).map(c => `<th>${c}</th>`).join('')}</tr>
-        ${beam.rows.map(r => {
+        <tr>${beam.cols.map(c => `<th>${c}</th>`).join('')}</tr>
+        ${beam.rows.map((r, ri) => {
           const cls = r.win ? 'win' : (r.msk ? 'msk' : '');
           const first = r.tok !== undefined ? r.tok : r.slot;
           const rankBadge = r.rank ? ` <span class="chip ${r.win?'g':'o'}">topk #${r.rank}</span>` : '';
           const cells = r.cells.map((c, idx) => idx === r.cells.length - 1
             ? `<td>${c === 'kept' ? `<span class="chip g">kept</span>${rankBadge}` : c === 'masked' ? '<span class="chip r">masked</span>' : c}</td>`
             : `<td>${c}</td>`).join('');
-          return `<tr class="${cls}"><td>${first}</td>${cells}</tr>`;
+          return `<tr class="${cls}" data-ri="${ri}"><td>${first}</td>${cells}</tr>`;
         }).join('')}
       </table>
     </div>`);
   }
   parts.push(`</div></div>`);
+  subIdx++;
 
-  const topkNum = s.inputs ? 3 : 2;
-  parts.push(`<div class="bs-arrow">↓ 全局 topk(beam) over B × ∑候选</div>`);
-  parts.push(`<div class="bs-sec">
-    <div class="bs-sec-lbl"><span class="num">${topkNum}</span>全局 topk(beam)</div>
+  // topk
+  parts.push(`<div class="bs-arrow" data-arrow-for="${subIdx}">↓ 全局 topk(beam) over B × ∑候选</div>`);
+  parts.push(`<div class="bs-sec" data-sub="${subIdx}">
+    <div class="bs-sec-lbl"><span class="num">${subIdx+1}</span>全局 topk(beam)</div>
     <div class="bs-topk">
       ${s.topk.map(t => `
         <div class="tk ${t.inf?'inf':''}">
@@ -1747,11 +1836,12 @@ function renderBeamStep(i) {
       `).join('')}
     </div>
   </div>`);
+  subIdx++;
 
-  const outNum = s.inputs ? 4 : 3;
-  parts.push(`<div class="bs-arrow">↓</div>`);
-  parts.push(`<div class="bs-sec">
-    <div class="bs-sec-lbl"><span class="num">${outNum}</span>输出 beam (下一步输入)</div>
+  // output
+  parts.push(`<div class="bs-arrow" data-arrow-for="${subIdx}">↓ 写入下一步状态</div>`);
+  parts.push(`<div class="bs-sec" data-sub="${subIdx}">
+    <div class="bs-sec-lbl"><span class="num">${subIdx+1}</span>输出 beam (下一步输入)</div>
     <div class="bs-cards">
       ${s.outputs.map(c => `
         <div class="bs-card ${c.win?'winner':''} ${c.inf?'inf':''}">
@@ -1766,6 +1856,98 @@ function renderBeamStep(i) {
   </div>`);
 
   root.innerHTML = parts.join('');
+
+  // attach sub-phase controls
+  bsState = { stepIdx: i, sub: 0, total: nSub };
+  document.getElementById('bs-sub-prev').addEventListener('click', () => setSubphase(bsState.sub - 1, true));
+  document.getElementById('bs-sub-next').addEventListener('click', () => setSubphase(bsState.sub + 1, true));
+  setSubphase(0, false);
+}
+
+let bsState = { stepIdx: 0, sub: 0, total: 1 };
+
+function setSubphase(n, userAction) {
+  const s = BS_STEPS[bsState.stepIdx];
+  n = Math.max(0, Math.min(bsState.total - 1, n));
+  const prevSub = bsState.sub;
+  bsState.sub = n;
+
+  // hide / show sections
+  document.querySelectorAll('#bs-panel .bs-sec').forEach(el => {
+    const k = parseInt(el.dataset.sub);
+    if (k <= n) {
+      const wasHidden = el.classList.contains('hidden');
+      el.classList.remove('hidden');
+      if (wasHidden || k === n) {
+        el.classList.remove('entering');
+        void el.offsetWidth;  // reflow
+        el.classList.add('entering');
+      }
+    } else {
+      el.classList.add('hidden');
+      el.classList.remove('entering');
+    }
+  });
+
+  // hide/show arrows
+  document.querySelectorAll('#bs-panel .bs-arrow[data-arrow-for]').forEach(el => {
+    const k = parseInt(el.dataset.arrowFor);
+    el.classList.toggle('hidden', k > n);
+    el.classList.toggle('pulsing', k === n);
+  });
+
+  // animate table rows with stagger when entering the enumerate section
+  const enumSub = s.inputs ? 1 : 0;
+  if (n === enumSub) {
+    document.querySelectorAll('#bs-panel .bs-tbl tr[data-ri]').forEach((tr, idx) => {
+      tr.classList.remove('row-in', 'flash');
+      void tr.offsetWidth;
+      tr.classList.add('row-in');
+      tr.style.animationDelay = (80 + idx * 120) + 'ms';
+      if (tr.classList.contains('msk')) {
+        setTimeout(() => tr.classList.add('flash'), 80 + idx * 120 + 350);
+      }
+    });
+  }
+
+  // pulse winners when on topk phase
+  const topkSub = s.inputs ? 2 : 1;
+  document.querySelectorAll('#bs-panel .bs-topk .tk').forEach(el => {
+    el.classList.toggle('bs-pulse', n === topkSub && !el.classList.contains('inf'));
+  });
+  document.querySelectorAll('#bs-panel .bs-tbl tr.win').forEach(el => {
+    el.classList.toggle('bs-pulse', n === topkSub);
+  });
+
+  // pulse output winners on output phase
+  const outSub = bsState.total - 1;
+  document.querySelectorAll('#bs-panel .bs-card.winner').forEach(el => {
+    el.classList.toggle('bs-pulse', n === outSub);
+  });
+
+  // caption
+  const info = subInfo(s, n);
+  const cap = document.getElementById('bs-caption');
+  if (cap) cap.innerHTML = `<span>子步 ${n+1}/${bsState.total}：${info.ttl}</span><span class="nar">${info.nar}</span>`;
+
+  // dots
+  document.querySelectorAll('#bs-panel .bs-subdot').forEach((d, idx) => {
+    d.classList.toggle('on', idx === n);
+    d.classList.toggle('done', idx < n);
+  });
+
+  // prev/next buttons
+  const prev = document.getElementById('bs-sub-prev');
+  const next = document.getElementById('bs-sub-next');
+  if (prev) prev.disabled = n === 0;
+  if (next) next.disabled = n === bsState.total - 1;
+
+  // scroll into view lightly when user navigates
+  if (userAction) {
+    const panel = document.getElementById('bs-panel');
+    const rect = panel.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function renderBeamNav(active) {
@@ -1794,7 +1976,11 @@ async function autoPlayBS() {
   for (let i = 0; i < BS_STEPS.length; i++) {
     renderBeamNav(i);
     renderBeamStep(i);
-    await new Promise(r => setTimeout(r, 1800));
+    const nSub = subCount(BS_STEPS[i]);
+    for (let k = 0; k < nSub; k++) {
+      setSubphase(k, false);
+      await new Promise(r => setTimeout(r, 1500));
+    }
   }
   btn.disabled = false; btn.textContent = '▶ 自动播放';
   bsPlaying = false;
