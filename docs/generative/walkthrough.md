@@ -95,6 +95,29 @@ item g: sid_path = [1, 4, 17, 18, 19]     targeting_rule: city == "深圳"
 
 其中：V=词表大小, L=路径长度, E=总边数, S=总 state 数, nL=叶子数, M=每叶最大 item 数, B=batch size。
 
+## 元数据字段速查（非 tensor）
+
+除了 tensor，`Trie.__init__` 还保存了若干纯 Python 元数据字段（不参与 tensor 运算，但决定了上面所有 tensor 的布局和索引规则）：
+
+| 字段 | 类型 | 含义 | 用在哪 |
+|------|------|------|--------|
+| `_level_start` | `list[int]` 长度 L | 每层第一个 state 的 global ID。`_level_start[d]` = 深度 d 的 state ID 起点 | Phase 2 枚举本层所有 state；Phase 4 把叶子 state → 局部索引 |
+| `_level_count` | `list[int]` 长度 L | 每层包含多少个 state。`_level_count[d]` = 深度 d 的 state 数 | Phase 2 逐层传播：`torch.arange(s_start, s_start + s_count)` 拿整层父节点 |
+| `_max_br` | `list[int]` 长度 L | 每层到下一层的**最大分支因子**（即任一 state 的子节点数最大值），由 builder 预统计 | Phase 2 和 Phase 3 CSR 步的 `offsets = torch.arange(max_br)`：用固定宽度一次性 gather 所有子节点，使整层成为规整矩阵 |
+| `_num_states` | `int` | 总 state 数 S（包含 L0 的 V 个预分配槽位和 state 0 的 padding 位） | 初始化 `node_valid = torch.zeros(B, S)` |
+| `_num_items` | `int` | 总 item 数 N | Phase 4 `output = torch.full((B, N), -inf)` |
+| `_d_dense` | `int` | 用 Dense 表的层数。前 `d_dense` 层用 `dense_mask`/`dense_states`，之后用 CSR | Phase 3 `step < d_dense` 分支判断 |
+| `_path_length` | `int` | 路径长度 L | Phase 2 从倒数第二层 `L-2` 循环到 0；Phase 3 循环 `range(1, L)` |
+| `_vocab_size` | `int` | 词表大小 V | Phase 3 Dense 步维度、Step 0 取 `node_valid[:, 1:V+1]` |
+
+> **为什么这些字段是 Python int/list 而不是 tensor？**
+> 它们只参与**形状计算、循环边界、索引偏移**，每个 iteration 用一次，从不进入批量计算。
+> 如果做成 tensor，反而每次访问都要 host↔device 同步；做成 Python 值可以直接用作 shape
+> 和 slice 参数（`node_valid[:, s_start : s_start + s_count]`），让 kernel launch 开销最小。
+
+**为什么 `_level_start` / `_level_count` 足以枚举整层？**
+State ID 在构建时就按 BFS 层序**连续分配**（见 §2.3），所以"深度 d 的所有 state"恰好是一段连续区间 `[level_start[d], level_start[d] + level_count[d])`。这就是 Phase 2 里用 `torch.arange(s_start, s_start + s_count)` 一行就能拿到"本层所有父节点"的原因——无需反向索引表，也无需逐节点扫描。
+
 ---
 
 ## 2. 离线构建
@@ -621,6 +644,25 @@ item_mask = [T, T, F, T, T, F, F]
 > 再用 `any(dim=2)` 判断"是否至少有一个子节点 valid"。整个过程是纯 tensor 操作，
 > 没有 Python 循环遍历节点，因此可以高效地在 GPU 上并行执行。
 
+> **易混点 — 传播方向 vs 索引方向**
+>
+> 乍一看代码像是"从父节点找子节点"，似乎和"自底向上"的说法相反。关键在于要把
+> **传播语义**和**索引实现**区分开：
+>
+> | 维度 | 方向 | 对应代码 |
+> |------|------|---------|
+> | **传播语义**（信息流） | 子 → 父（bottom-up） | `child_v.any(dim=2)` —— 子 validity 归约得到父 validity |
+> | **索引实现**（查邻接） | 父 → 子（top-down） | `ch_states = packed_csr[gather_idx, 1]` —— 通过 `csr_indptr` 拿父节点的所有子节点 |
+>
+> 之所以这么做，是因为构建时 CSR 只存了"父 → 子"一个方向的邻接表。想"从子找父"
+> 就要额外建一张反向索引，内存翻倍、访存模式还更差。相反，按层枚举父节点、
+> 一次性 gather 出本层所有父的子节点构成 `[s_count, max_br]` 规整矩阵、再沿子维度
+> `any` 归约回父——整个过程全是连续访存 + 规整 tensor 操作，对 GPU 最友好。
+>
+> 所以循环体内每一轮做的是：**"枚举深度 d 的所有父节点 → 取它们的子（深度 d+1，
+> 上一轮已算完）→ OR 归约 → 写回父节点"**。这正是自底向上 propagation 在 CSR
+> 存储下的标准实现。
+
 从叶子向上传播。只要子树下有一个 valid item，节点就 valid。
 
 **叶子层（L4，States 2063~2068）**：
@@ -732,7 +774,32 @@ St2063✓ St2064✗ St2065✓ St2066✓ St2067✗ St2068✗
 > **`masked_fill` 的作用**：把不在 Trie 中、或被剪枝掉的 token 的分数设为 `-inf`，
 > 这样 `topk` 时这些 token 永远不会被选中——这就是"约束解码"的关键所在。
 
-假设 decoder 的 `log_softmax` 输出如下（简化为只列相关 token 的值）。
+#### 核心模式：双重 mask + 全局 topk
+
+无论 Step 0、Dense 步还是 CSR 步，每轮都遵循同一套"候选生成 → mask → 全局 topk"的流水线：
+
+| 环节 | 作用 | 对应 tensor |
+|------|------|------------|
+| **① 枚举候选** | 对每个 beam 找出所有可能的下一 token/state | Dense：`dense_mask[parent_tok]` 取全 V 维；CSR：`packed_csr[indptr[s]:indptr[s+1]]` 取实际分支 |
+| **② 结构 mask** | 排除 trie 中不存在的边（或 CSR burst-read 的 padding 位） | Dense：`dense_mask` 直接是 bool；CSR：`struct_ok = offsets < actual_lens` |
+| **③ 剪枝 mask** | 排除被 Phase 2 标记为 invalid 的 state（子树无合法 item） | `node_valid[bb, child_state]` |
+| **④ 分数累积** | `cand[b, t] = beam_scores[b] + log_prob[b, t]` | 对不合法候选取 `-inf` 不影响后续 topk |
+| **⑤ 全局 topk** | 在 `B × (beam × ∑候选)` 空间上做 `topk(beam)` | `cand.view(B, -1).topk(beam)` |
+
+> **为什么要"全局 topk"？**
+> 如果每个 beam 独立挑自己的 top-k，就失去了 beam 之间的竞争。真正的 beam search
+> 让所有 beam 的所有候选一起排序——一个 beam 可能占据多个 topk 槽位（如本例 Step 4 中
+> beam 0 的两个子同时入围 #1 和 #2），另一些 beam 则可能被完全淘汰。
+> 这就是 `cand.view(B, -1).topk(beam)` 中 `-1` 的作用：把 beam 和 child 两个维度摊平。
+
+> **Dense 步 vs CSR 步的选择**
+>
+> - **Dense (step < d_dense)**：候选空间 = V（全词表）。优势是 O(1) 数组下标，适合
+>   前几层"分支少但需要快速查表"的场景。代价：`dense_mask`/`dense_states` 要占 V^d 空间。
+> - **CSR (step ≥ d_dense)**：候选空间 = `max_br[step]`（一般 ≪ V）。优势是只读取实际
+>   存在的子节点，适合深层稀疏分支。代价：要走 `csr_indptr` 查区间 + `packed_csr` gather。
+
+下面按 step 展开（假设 decoder 的 `log_softmax` 输出如下，简化为只列相关 token 的值）：
 
 #### Step 0: 首 token
 

@@ -206,6 +206,61 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
 .tc .tc-usage .uhigh{color:var(--green);font-weight:500}
 .tc .tc-usage .utip{color:var(--text-2);font-size:10px;margin-top:4px}
 
+/* ── Beam Search Interactive ── */
+.bs-wrap{margin:16px 0}
+.bs-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.bs-nav .bs-auto{margin-left:auto;font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-family:var(--font)}
+.bs-nav .bs-auto:hover{border-color:var(--text-2);color:var(--text-0)}
+.bs-tab{padding:7px 14px;border-radius:6px;font-size:13px;border:1px solid var(--border-light);background:var(--bg-1);color:var(--text-1);cursor:pointer;transition:all .2s;font-family:var(--font)}
+.bs-tab:hover{border-color:var(--text-2);color:var(--text-0)}
+.bs-tab.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);font-weight:600}
+.bs-tab .m{font-size:10px;color:var(--text-2);margin-left:4px;font-family:var(--mono);font-weight:400}
+.bs-tab.on .m{color:var(--accent)}
+.bs-panel{background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;padding:18px 22px}
+.bs-hd{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.bs-hd .ttl{font-size:17px;font-weight:600;color:var(--text-0)}
+.bs-hd .mth{font-size:11px;padding:3px 9px;border-radius:99px;background:var(--accent-bg);color:var(--accent);font-weight:600;font-family:var(--mono)}
+.bs-hd .mb{font-size:11px;padding:3px 9px;border-radius:99px;background:var(--yellow-bg);color:var(--yellow);font-family:var(--mono);font-weight:600}
+.bs-desc{font-size:13px;color:var(--text-1);line-height:1.7;margin:6px 0 10px;max-width:840px}
+.bs-formula{font-family:var(--mono);font-size:12px;color:var(--accent);padding:10px 14px;background:var(--bg-2);border-radius:6px;margin:8px 0 14px;line-height:1.7;white-space:pre-wrap;overflow-x:auto;border:1px solid var(--border-light)}
+.bs-formula .cm{color:var(--text-2)}
+.bs-sec{margin:16px 0 0}
+.bs-sec-lbl{font-size:11px;color:var(--text-2);font-weight:700;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.bs-sec-lbl .num{display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--accent-bg);color:var(--accent);align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.bs-cards{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+.bs-card{padding:8px 12px;border-radius:6px;border:1px solid var(--border-light);background:var(--bg-1);min-width:140px;font-family:var(--mono);font-size:12px;line-height:1.6}
+.bs-card.winner{border-color:var(--green);background:var(--green-bg)}
+.bs-card.inf{opacity:.4}
+.bs-card .c-hd{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-2);font-family:var(--font);font-weight:600;margin-bottom:2px}
+.bs-card .c-hd .bn{color:var(--text-0)}
+.bs-card .c-st{color:var(--accent);font-weight:700;font-size:13px}
+.bs-card.winner .c-st{color:var(--green)}
+.bs-card .c-sc{color:var(--text-1)}
+.bs-card .c-path{font-size:11px;color:var(--text-2);margin-top:2px}
+.bs-card .c-leaf{font-size:10px;color:var(--yellow);margin-top:2px;font-family:var(--font);font-weight:600}
+.bs-beams{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.bs-beam{border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;background:var(--bg-1)}
+.bs-beam .bb-hd{font-size:12px;font-weight:600;color:var(--text-0);margin-bottom:3px;font-family:var(--mono)}
+.bs-beam .bb-note{font-size:11px;color:var(--text-2);margin-bottom:6px}
+.bs-tbl{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono);margin-top:4px}
+.bs-tbl th{background:var(--bg-2);color:var(--text-1);padding:5px 8px;font-weight:600;text-align:left;font-family:var(--font);font-size:11px;white-space:nowrap}
+.bs-tbl td{padding:5px 8px;border-top:1px solid var(--border-light);white-space:nowrap;color:var(--text-1)}
+.bs-tbl tr.msk td{color:var(--text-2);background:rgba(176,106,96,.04)}
+.bs-tbl tr.win td{background:var(--green-bg);color:var(--green);font-weight:600}
+.bs-tbl td.num{text-align:right;font-family:var(--mono)}
+.bs-tbl .chip{font-size:9px;padding:1px 6px;border-radius:99px;font-weight:600;font-family:var(--font)}
+.bs-tbl .chip.g{background:var(--green-bg);color:var(--green)}
+.bs-tbl .chip.r{background:var(--red-bg);color:var(--red)}
+.bs-tbl .chip.o{background:var(--accent-bg);color:var(--accent)}
+.bs-tbl .chip.y{background:var(--yellow-bg);color:var(--yellow)}
+.bs-topk{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.bs-topk .tk{padding:6px 10px;border-radius:6px;background:var(--green-bg);border:1px solid var(--green);font-family:var(--mono);font-size:11px;color:var(--green);font-weight:600;line-height:1.5}
+.bs-topk .tk.inf{background:var(--bg-2);border-color:var(--border-light);color:var(--text-2);font-weight:400}
+.bs-topk .tk .rk{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--green);color:#fff;border-radius:3px;font-size:9px}
+.bs-topk .tk.inf .rk{background:var(--text-2)}
+.bs-arrow{color:var(--text-2);font-size:16px;margin:4px 0;text-align:center;user-select:none}
+.bs-note{font-size:11px;color:var(--text-2);margin-top:4px;line-height:1.5;font-style:italic}
+
 /* ── Responsive ── */
 @media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:56px 1fr} .sidebar{display:none} main{padding:20px 16px 60px}}
 </style>
@@ -241,6 +296,7 @@ tr.filtered td{background:var(--red-bg);color:var(--text-2)}
   <a href="#phase4" class="sub">Phase 4 Resolve</a>
   <a href="#result" class="sub">最终结果</a>
   <a href="#tensors">Tensor 速查</a>
+  <a href="#meta" class="sub">元数据字段</a>
 </aside>
 
 <!-- ━━━ Main ━━━ -->
@@ -492,6 +548,21 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
     node_valid[:, s:s+cnt] = child_v.<span class="fn">any</span>(dim=2) <span class="cm"># 有一个子 valid 即可</span></div>
   </div>
 
+  <div class="vp-summary" style="border-left:3px solid var(--red);background:var(--red-bg);margin-top:14px">
+    <b style="color:var(--red)">易混点 — 传播方向 vs 索引方向</b><br>
+    乍看代码像是"从父找子"，似乎和"自底向上"相反。关键是把<b>传播语义</b>和<b>索引实现</b>分开：
+    <div class="tbl-wrap" style="margin-top:8px;margin-bottom:4px">
+      <table>
+        <tr><th>维度</th><th>方向</th><th>对应代码</th></tr>
+        <tr><td>传播语义 (信息流)</td><td style="color:var(--green);font-weight:600">子 → 父 (bottom-up)</td><td class="mono"><code>child_v.any(dim=2)</code> — 子 validity 归约得父 validity</td></tr>
+        <tr><td>索引实现 (查邻接)</td><td style="color:var(--accent);font-weight:600">父 → 子 (top-down)</td><td class="mono"><code>ch_states = packed_csr[gather_idx, 1]</code></td></tr>
+      </table>
+    </div>
+    CSR 构建时只存了"父 → 子"一个方向的邻接表。想"从子找父"需额外建反向索引，内存翻倍、访存更差。
+    所以这里按层枚举父节点、一次性 gather 出本层所有父的子节点构成 <code>[s_count, max_br]</code> 规整矩阵、再沿子维 <code>any</code> 归约回父——全是连续访存 + 规整 tensor 操作，对 GPU 最友好。<br>
+    <span style="color:var(--text-2);font-size:12px">循环每轮做的是："枚举深度 d 的所有父节点 → 取它们的子 (深度 d+1，上一轮已算完) → OR 归约 → 写回父节点"</span>
+  </div>
+
   <p style="color:var(--text-0);font-weight:600;margin-top:20px;font-size:13px">传播过程可视化</p>
   <div class="vp-tree-wrap">
     <svg id="vp-trie" width="760" height="350" viewBox="0 0 760 350"></svg>
@@ -511,16 +582,27 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
   </div>
 
   <h3 id="phase3">Phase 3: Beam Search (beam_width=3)</h3>
-  <p class="desc">每步对 beam × children 所有候选做全局 topk。Step 0~1 用 Dense 表 O(1) 查询；Step 2~4 用 CSR。</p>
-  <div class="tbl-wrap"><table class="beam-table">
-    <tr><th>Step</th><th>方法</th><th>Beam 0</th><th>Beam 1</th><th>Beam 2</th></tr>
-    <tr><td>0</td><td>首 token</td><td class="tip">tok=0 → St 1  (-0.5)</td><td class="inf">-inf</td><td class="inf">-inf</td></tr>
-    <tr><td>1</td><td>Dense</td><td class="tip">tok=2 → St 2050  (-0.8)</td><td>tok=1 → St 2049  (-1.3)</td><td class="inf">-inf</td></tr>
-    <tr><td>2</td><td>CSR</td><td class="tip">tok=8 → St 2055  (-1.2)</td><td>tok=2 → St 2053  (-1.9)</td><td class="inf">-inf</td></tr>
-    <tr><td>3</td><td>CSR</td><td class="tip">tok=9 → St 2060  (-1.4)</td><td>tok=3 → St 2058  (-2.4)</td><td class="inf">-inf</td></tr>
-    <tr><td>4</td><td>CSR (叶)</td><td class="tip">tok=10 → St 2065 [d]  (-1.7)</td><td>tok=11 → St 2066 [e]  (-2.1)</td><td>tok=4 → St 2063 [a,b]  (-2.8)</td></tr>
-  </table></div>
-  <p class="desc" style="color:var(--accent)">→ 点击 Trie 的「Beam Search 动画」按钮可逐步查看搜索过程</p>
+  <p>每步对 <code>beam × children</code> 所有候选做全局 topk。Step 0~1 用 <b>Dense 表</b> O(1) 查询；Step 2~4 用 <b>CSR burst-read</b>。
+    每步都被 <b>两重 mask</b> 过滤：(1) 结构合法性 (dense_mask / struct_ok)；(2) 剪枝有效性 (node_valid)。</p>
+
+  <details style="margin:8px 0 14px;font-size:13px">
+    <summary style="cursor:pointer;color:var(--accent);font-weight:600">▸ 总览表格 (点击展开)</summary>
+    <div class="tbl-wrap" style="margin-top:8px"><table class="beam-table">
+      <tr><th>Step</th><th>方法</th><th>Beam 0</th><th>Beam 1</th><th>Beam 2</th></tr>
+      <tr><td>0</td><td>首 token</td><td class="tip">tok=0 → St 1  (-0.5)</td><td class="inf">-inf</td><td class="inf">-inf</td></tr>
+      <tr><td>1</td><td>Dense</td><td class="tip">tok=2 → St 2050  (-0.8)</td><td>tok=1 → St 2049  (-1.3)</td><td class="inf">-inf</td></tr>
+      <tr><td>2</td><td>CSR</td><td class="tip">tok=8 → St 2055  (-1.2)</td><td>tok=2 → St 2053  (-1.9)</td><td class="inf">-inf</td></tr>
+      <tr><td>3</td><td>CSR</td><td class="tip">tok=9 → St 2060  (-1.4)</td><td>tok=3 → St 2058  (-2.4)</td><td class="inf">-inf</td></tr>
+      <tr><td>4</td><td>CSR (叶)</td><td class="tip">tok=10 → St 2065 [d]  (-1.7)</td><td>tok=11 → St 2066 [e]  (-2.1)</td><td>tok=4 → St 2063 [a,b]  (-2.8)</td></tr>
+    </table></div>
+  </details>
+
+  <p style="color:var(--text-0);font-weight:600;margin-top:8px;font-size:13px">🔍 逐步交互 — 选择某一步查看完整计算过程</p>
+  <div class="bs-wrap">
+    <div class="bs-nav" id="bs-nav"></div>
+    <div class="bs-panel" id="bs-panel"></div>
+  </div>
+  <p class="desc" style="color:var(--accent);margin-top:8px">→ 点击 <a href="#trie" style="color:var(--accent);text-decoration:underline">最上方 Trie 的「Beam Search 动画」</a>按钮可同时看到搜索路径在 Trie 上的轨迹</p>
 
   <h3 id="phase4">Phase 4: Resolve Leaves</h3>
   <p>叶子 state 通过 <code>leaf_item_ids</code> 映射回 item index，用 <code>scatter_reduce(amax)</code> 聚合分数。
@@ -657,6 +739,26 @@ node_valid[:, leaf_s : leaf_s + leaf_c] = leaf_v
     <tr><td class="mono">beam_paths</td><td class="mono">[B, beam, L] int64</td><td>已选 token 序列</td><td>Phase 3</td></tr>
   </table></div>
   <p class="desc">V=词表大小, L=路径长度, E=总边数, S=总 state 数, nL=叶子数, M=每叶最大 item 数, B=batch。</p>
+
+  <h3 id="meta">元数据字段 (非 tensor)</h3>
+  <p class="desc">除了 tensor，<code>Trie.__init__</code> 还保存了一组纯 Python 元数据字段。它们不进入 tensor 运算，但决定了上面所有 tensor 的布局和索引规则。</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>字段</th><th>类型</th><th>含义</th><th>用在哪</th></tr>
+    <tr><td class="mono">_level_start</td><td class="mono">list[int] 长度 L</td><td><code>_level_start[d]</code> = 深度 d 首个 state 的 global ID</td><td>Phase 2 枚举本层所有 state；Phase 4 叶子 state → 局部索引</td></tr>
+    <tr><td class="mono">_level_count</td><td class="mono">list[int] 长度 L</td><td><code>_level_count[d]</code> = 深度 d 的 state 数</td><td>Phase 2 逐层传播：<code>torch.arange(s_start, s_start + s_count)</code> 一次拿整层父节点</td></tr>
+    <tr><td class="mono">_max_br</td><td class="mono">list[int] 长度 L</td><td>每层到下一层的最大分支因子 (builder 预统计)</td><td>Phase 2 / Phase 3 CSR 步：<code>offsets = torch.arange(max_br)</code> 用固定宽度 gather，使整层成为规整矩阵</td></tr>
+    <tr><td class="mono">_num_states</td><td class="mono">int</td><td>总 state 数 S (含 L0 的 V 个预分配槽位 + padding)</td><td>初始化 <code>node_valid = torch.zeros(B, S)</code></td></tr>
+    <tr><td class="mono">_num_items</td><td class="mono">int</td><td>总 item 数 N</td><td>Phase 4 <code>torch.full((B, N), -inf)</code></td></tr>
+    <tr><td class="mono">_d_dense</td><td class="mono">int</td><td>用 Dense 表的层数</td><td>Phase 3 <code>step &lt; d_dense</code> 分支判断</td></tr>
+    <tr><td class="mono">_path_length</td><td class="mono">int</td><td>路径长度 L</td><td>Phase 2 循环 <code>range(L-2, -1, -1)</code>；Phase 3 循环 <code>range(1, L)</code></td></tr>
+    <tr><td class="mono">_vocab_size</td><td class="mono">int</td><td>词表大小 V</td><td>Phase 3 Dense 步维度、Step 0 取 <code>node_valid[:, 1:V+1]</code></td></tr>
+  </table></div>
+  <div class="vp-summary" style="border-left:3px solid var(--accent)">
+    <b style="color:var(--accent)">为什么这些是 Python int/list 而非 tensor？</b><br>
+    它们只参与<b>形状计算、循环边界、索引偏移</b>，每轮用一次，从不进入批量计算。做成 tensor 反而每次访问都要 host↔device 同步；做成 Python 值可直接作 shape / slice 参数 (<code>node_valid[:, s_start : s_start + s_count]</code>)，让 kernel launch 开销最小。<br>
+    <b style="color:var(--accent)">为什么 <code>_level_start</code> + <code>_level_count</code> 足以枚举整层？</b><br>
+    state ID 构建时按 BFS 层序<b>连续分配</b> (见 §State ID)，所以"深度 d 的所有 state"恰好是一段连续区间 <code>[level_start[d], level_start[d] + level_count[d])</code>——这就是 Phase 2 里用 <code>torch.arange</code> 一行就能拿到"本层所有父节点"的原因。
+  </div>
 
   <h3>本例构建结果</h3>
   <div class="stats">
@@ -1381,6 +1483,311 @@ document.querySelectorAll('#tf-bar .tf-phase').forEach(btn => {
     });
   });
 });
+
+/* ═══════════ Beam Search Interactive ═══════════ */
+const BS_STEPS = [
+  {
+    title: 'Step 0 · 首 token',
+    method: 'start_mask & node_valid',
+    maxBr: null,
+    desc: '用 decoder 对 dummy 输入打分得到 lp0 ∈ [B,V]，再用 start_mask (trie 中存在的首 token) 与 node_valid[:, 1:V+1] (剪枝后有效) 的交集做 mask，最后 topk(beam)。',
+    formula: "logits0 = decoder(query, dummy_path)     <span class='cm'># [B, V]</span>\nlp0 = log_softmax(logits0, dim=-1)\nl0_valid = node_valid[:, 1:V+1]                <span class='cm'># 跳过 state 0 (padding)</span>\nlp0.masked_fill_(~(<b>start_mask</b> &amp; <b>l0_valid</b>), -inf)\ntop_lp, top_tok = lp0.topk(beam, dim=-1)       <span class='cm'># [B, beam]</span>\nbeam_states = top_tok + 1                      <span class='cm'># state = token + 1</span>",
+    inputs: null,
+    beams: [{
+      label: '(尚无 beam · 从 L0 所有 state 中挑选)',
+      cols: ['token', 'start_mask', 'node_valid[1+tok]', 'decoder lp', '累积 score', '→ state', '状态'],
+      rows: [
+        { tok: 0, cells: ['T', 'T', '-0.5', '-0.5', 'St 1', 'kept'], win: true, rank: 1 },
+        { tok: 1, cells: ['T', '<span class="chip r">F</span> (整个 token=1 子树被剪)', '-1.2', '<span class="chip r">-inf</span>', '—', 'masked'], msk: true },
+      ],
+    }],
+    topk: [
+      { rank: 1, pair: 'tok=0', st: 1, sc: '-0.5' },
+      { rank: 2, pair: '—', st: '—', sc: '-inf', inf: true },
+      { rank: 3, pair: '—', st: '—', sc: '-inf', inf: true },
+    ],
+    outputs: [
+      { bid: 0, st: 1, sc: '-0.5', path: '[0, _, _, _, _]', win: true },
+      { bid: 1, st: '—', sc: '-inf', path: '—', inf: true },
+      { bid: 2, st: '—', sc: '-inf', path: '—', inf: true },
+    ],
+    note: '首 token 只剩 1 个合法选项 (tok=0)，beam 1/2 暂时填 -inf，后续步骤会通过 "beam 间竞争" 重新分配。',
+  },
+  {
+    title: 'Step 1 · Dense 步',
+    method: 'dense_mask & dense_states',
+    maxBr: null,
+    desc: '每个 beam 用 parent_tok = state - 1 作为 dense_mask / dense_states 的索引，一次性 O(1) 取出全 V 维的子 token 查表。再与 node_valid 取交集、加上 beam_score + lp，最后在 B × beam × V 个候选上做全局 topk。',
+    formula: "user_repr = query.expand(B, beam, -1).reshape(B*beam, -1)\nlogits = decoder(user_repr, paths_flat)            <span class='cm'># [B*beam, V]</span>\nlp = log_softmax(logits, dim=-1)\n\nparent_tok = flat_st - 1                            <span class='cm'># state → token</span>\nmasks    = <b>dense_mask</b>[parent_tok]                    <span class='cm'># [B*beam, V]</span>\nst_table = <b>dense_states</b>[parent_tok]                  <span class='cm'># [B*beam, V]</span>\nnv       = node_valid[bb, st_table]                 <span class='cm'># 剪枝检查</span>\ncombined = masks &amp; nv\nlp.masked_fill_(~combined, -inf)\n\ncand = beam_scores.unsqueeze(-1) + lp.view(B, beam, V)\ntop_sc, top_flat = cand.view(B, -1).topk(beam)      <span class='cm'># 全局 topk</span>\ntop_bm = top_flat // V; top_tk = top_flat % V",
+    inputs: [
+      { bid: 0, st: 1, sc: '-0.5', path: '[0, _, _, _, _]' },
+    ],
+    beams: [{
+      label: 'Beam 0 · state=1 (parent_tok=0)',
+      note: 'dense_mask[0] 在 V=2048 维中仅 idx 1, 2 为 T → 2 个子 token。',
+      cols: ['token', 'dense_mask[0,tok]', 'child state', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+      rows: [
+        { tok: 1, cells: ['T', 'St 2049', '<span class="chip g">T</span>', '-0.8', '-0.5 + (-0.8) = <b>-1.3</b>', 'kept'], keep: true, rank: 2 },
+        { tok: 2, cells: ['T', 'St 2050', '<span class="chip g">T</span>', '-0.3', '-0.5 + (-0.3) = <b>-0.8</b>', 'kept'], win: true, rank: 1 },
+      ],
+    }],
+    topk: [
+      { rank: 1, pair: 'beam=0, tok=2', st: 2050, sc: '-0.8' },
+      { rank: 2, pair: 'beam=0, tok=1', st: 2049, sc: '-1.3' },
+      { rank: 3, pair: '—', st: '—', sc: '-inf', inf: true },
+    ],
+    outputs: [
+      { bid: 0, st: 2050, sc: '-0.8', path: '[0, 2, _, _, _]', win: true },
+      { bid: 1, st: 2049, sc: '-1.3', path: '[0, 1, _, _, _]' },
+      { bid: 2, st: '—', sc: '-inf', path: '—', inf: true },
+    ],
+    note: 'topk 在整个 B × beam × V 空间上做全局竞争 —— 同一 beam 的两个好候选可以占多个 slot (这里 beam 0 的两个子都进了 topk)。',
+  },
+  {
+    title: 'Step 2 · CSR 步',
+    method: 'csr_indptr + packed_csr burst-read',
+    maxBr: 2,
+    desc: '从 step=d_dense=2 开始切换到 CSR。用 csr_indptr 定位每个 beam 的子节点区间，用固定宽度 limit=max_br[2]=2 做 burst-read，得到 [B*beam, 2, 2] 的 (token, child_state) 矩阵。然后用 struct_ok (排除 padding 位) + node_valid (剪枝) 双重过滤。',
+    formula: "flat_st = beam_states.reshape(B*beam)\nstarts  = <b>csr_indptr</b>[flat_st]\na_lens  = <b>csr_indptr</b>[flat_st+1] - starts          <span class='cm'># 实际子节点数</span>\noffs    = arange(limit=2)\ngi      = (starts.unsqueeze(1) + offs).clamp(...)\ngathered = <b>packed_csr</b>[gi]                          <span class='cm'># [B*beam, 2, 2]</span>\nc_tok, c_st = gathered[..., 0], gathered[..., 1\n\nstruct_ok = offs &lt; a_lens.unsqueeze(1)                <span class='cm'># 排除 padding</span>\nc_nv = node_valid[bb, c_st]                           <span class='cm'># 剪枝检查</span>\nvalid = struct_ok &amp; c_nv\nc_lp = lp.gather(1, c_tok).masked_fill(~valid, -inf)\ncand = beam_scores + c_lp                              <span class='cm'># [B, beam, limit]</span>\ntopk over B × (beam × limit)",
+    inputs: [
+      { bid: 0, st: 2050, sc: '-0.8', path: '[0, 2, _, _, _]' },
+      { bid: 1, st: 2049, sc: '-1.3', path: '[0, 1, _, _, _]' },
+    ],
+    beams: [
+      {
+        label: 'Beam 0 · state=2050 (indptr[2050..2051]=[6,7], 实际 1 个子)',
+        note: 'actual_lens=1, limit=2 → slot 1 是 padding，被 struct_ok 屏蔽。',
+        cols: ['slot', 'packed_csr[i]', 'token', 'child state', 'struct_ok', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+        rows: [
+          { slot: 0, cells: ['[8, 2055]', 8, 'St 2055', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.4', '-0.8 + (-0.4) = <b>-1.2</b>', 'kept'], win: true, rank: 1 },
+          { slot: 1, cells: ['—', '—', '—', '<span class="chip r">F</span> (padding)', '—', '—', '<span class="chip r">-inf</span>', 'masked'], msk: true },
+        ],
+      },
+      {
+        label: 'Beam 1 · state=2049 (indptr[2049..2050]=[4,6], 实际 2 个子)',
+        note: '2 个子节点都由 struct_ok 通过，但 St 2054 被 node_valid 剪掉。',
+        cols: ['slot', 'packed_csr[i]', 'token', 'child state', 'struct_ok', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+        rows: [
+          { slot: 0, cells: ['[2, 2053]', 2, 'St 2053', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.6', '-1.3 + (-0.6) = <b>-1.9</b>', 'kept'], keep: true, rank: 2 },
+          { slot: 1, cells: ['[5, 2054]', 5, 'St 2054', '<span class="chip g">T</span>', '<span class="chip r">F</span> (item c 分支被剪)', '-0.9', '<span class="chip r">-inf</span>', 'masked'], msk: true },
+        ],
+      },
+    ],
+    topk: [
+      { rank: 1, pair: 'beam=0, slot=0 (tok=8)', st: 2055, sc: '-1.2' },
+      { rank: 2, pair: 'beam=1, slot=0 (tok=2)', st: 2053, sc: '-1.9' },
+      { rank: 3, pair: '—', st: '—', sc: '-inf', inf: true },
+    ],
+    outputs: [
+      { bid: 0, st: 2055, sc: '-1.2', path: '[0, 2, 8, _, _]', win: true },
+      { bid: 1, st: 2053, sc: '-1.9', path: '[0, 1, 2, _, _]' },
+      { bid: 2, st: '—', sc: '-inf', path: '—', inf: true },
+    ],
+    note: '注意候选空间从 V=2048 缩小到 limit=2：CSR 步只看每个 state 实际的子节点，不遍历整个词表，是深层稀疏分支的高效打法。',
+  },
+  {
+    title: 'Step 3 · CSR 步',
+    method: 'csr_indptr + packed_csr burst-read',
+    maxBr: 1,
+    desc: 'max_branch_factor = 1，这一层每个 state 只有 1 个子节点。limit 动态缩为 1，候选空间只有 B × beam × 1 = 3 个。',
+    formula: "limit = max(trie._max_br[3], 1) = 1\n# 其余流程同 Step 2",
+    inputs: [
+      { bid: 0, st: 2055, sc: '-1.2', path: '[0, 2, 8, _, _]' },
+      { bid: 1, st: 2053, sc: '-1.9', path: '[0, 1, 2, _, _]' },
+    ],
+    beams: [
+      {
+        label: 'Beam 0 · state=2055 (indptr[2055..2056]=[11,12])',
+        cols: ['slot', 'packed_csr[i]', 'token', 'child state', 'struct_ok', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+        rows: [
+          { slot: 0, cells: ['[9, 2060]', 9, 'St 2060', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.2', '-1.2 + (-0.2) = <b>-1.4</b>', 'kept'], win: true, rank: 1 },
+        ],
+      },
+      {
+        label: 'Beam 1 · state=2053 (indptr[2053..2054]=[9,10])',
+        cols: ['slot', 'packed_csr[i]', 'token', 'child state', 'struct_ok', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+        rows: [
+          { slot: 0, cells: ['[3, 2058]', 3, 'St 2058', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.5', '-1.9 + (-0.5) = <b>-2.4</b>', 'kept'], keep: true, rank: 2 },
+        ],
+      },
+    ],
+    topk: [
+      { rank: 1, pair: 'beam=0, slot=0 (tok=9)', st: 2060, sc: '-1.4' },
+      { rank: 2, pair: 'beam=1, slot=0 (tok=3)', st: 2058, sc: '-2.4' },
+      { rank: 3, pair: '—', st: '—', sc: '-inf', inf: true },
+    ],
+    outputs: [
+      { bid: 0, st: 2060, sc: '-1.4', path: '[0, 2, 8, 9, _]', win: true },
+      { bid: 1, st: 2058, sc: '-2.4', path: '[0, 1, 2, 3, _]' },
+      { bid: 2, st: '—', sc: '-inf', path: '—', inf: true },
+    ],
+    note: 'limit 按层动态变化 (由 builder 预统计 max_branch_factors 得到) —— 稀疏层省掉无用计算。',
+  },
+  {
+    title: 'Step 4 · CSR 步 (叶子)',
+    method: 'csr_indptr + packed_csr burst-read',
+    maxBr: 2,
+    desc: '最后一层，每个 state 的子节点是叶子。max_branch_factor = 2。此步结束后 beam_states 就是叶子 state，交给 Phase 4 resolve_leaves 映射回 item。',
+    formula: "limit = max(trie._max_br[4], 1) = 2\n# 流程同 Step 2，输出的 beam_states 为叶子 state",
+    inputs: [
+      { bid: 0, st: 2060, sc: '-1.4', path: '[0, 2, 8, 9, _]' },
+      { bid: 1, st: 2058, sc: '-2.4', path: '[0, 1, 2, 3, _]' },
+    ],
+    beams: [
+      {
+        label: 'Beam 0 · state=2060 (indptr[2060..2061]=[16,18], 2 个子叶)',
+        note: '这里产生 2 个合法候选，是 beam 0 竞争 topk 中多个 slot 的来源。',
+        cols: ['slot', 'packed_csr[i]', 'token', '→ 叶子 state', 'struct_ok', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+        rows: [
+          { slot: 0, cells: ['[10, 2065]', 10, 'St 2065 <span class="chip y">item d</span>', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.3', '-1.4 + (-0.3) = <b>-1.7</b>', 'kept'], win: true, rank: 1 },
+          { slot: 1, cells: ['[11, 2066]', 11, 'St 2066 <span class="chip y">item e</span>', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.7', '-1.4 + (-0.7) = <b>-2.1</b>', 'kept'], win: true, rank: 2 },
+        ],
+      },
+      {
+        label: 'Beam 1 · state=2058 (indptr[2058..2059]=[14,15], 1 个子叶)',
+        cols: ['slot', 'packed_csr[i]', 'token', '→ 叶子 state', 'struct_ok', 'node_valid', 'decoder lp', 'beam_score + lp', '状态'],
+        rows: [
+          { slot: 0, cells: ['[4, 2063]', 4, 'St 2063 <span class="chip y">item a, b</span>', '<span class="chip g">T</span>', '<span class="chip g">T</span>', '-0.4', '-2.4 + (-0.4) = <b>-2.8</b>', 'kept'], win: true, rank: 3 },
+          { slot: 1, cells: ['—', '—', '—', '<span class="chip r">F</span> (padding)', '—', '—', '<span class="chip r">-inf</span>', 'masked'], msk: true },
+        ],
+      },
+    ],
+    topk: [
+      { rank: 1, pair: 'beam=0, slot=0 (tok=10)', st: '2065 [d]', sc: '-1.7' },
+      { rank: 2, pair: 'beam=0, slot=1 (tok=11)', st: '2066 [e]', sc: '-2.1' },
+      { rank: 3, pair: 'beam=1, slot=0 (tok=4)',  st: '2063 [a,b]', sc: '-2.8' },
+    ],
+    outputs: [
+      { bid: 0, st: 2065, sc: '-1.7', path: '[0, 2, 8, 9, 10]', win: true, leaf: 'item d' },
+      { bid: 1, st: 2066, sc: '-2.1', path: '[0, 2, 8, 9, 11]', win: true, leaf: 'item e' },
+      { bid: 2, st: 2063, sc: '-2.8', path: '[0, 1, 2, 3, 4]',  win: true, leaf: 'item a, b (共享叶子)' },
+    ],
+    note: '最终 3 个 beam 都指向合法叶子，下一步 Phase 4 用 leaf_item_ids 映射回 item 空间并用 scatter_reduce(amax) 汇总。',
+  },
+];
+
+function escHTML(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function renderBeamStep(i) {
+  const s = BS_STEPS[i];
+  const root = document.getElementById('bs-panel');
+  const parts = [];
+
+  parts.push(`<div class="bs-hd">
+    <span class="ttl">${s.title}</span>
+    <span class="mth">${s.method}</span>
+    ${s.maxBr != null ? `<span class="mb">max_br = ${s.maxBr}</span>` : ''}
+  </div>`);
+  parts.push(`<div class="bs-desc">${s.desc}</div>`);
+  parts.push(`<div class="bs-formula">${s.formula}</div>`);
+
+  if (s.inputs) {
+    parts.push(`<div class="bs-sec">
+      <div class="bs-sec-lbl"><span class="num">1</span>输入 beam</div>
+      <div class="bs-cards">
+        ${s.inputs.map(c => `
+          <div class="bs-card">
+            <div class="c-hd"><span class="bn">Beam ${c.bid}</span><span class="c-sc">score=${c.sc}</span></div>
+            <div class="c-st">state ${c.st}</div>
+            <div class="c-path">${c.path}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`);
+  }
+
+  const childStepNum = s.inputs ? 2 : 1;
+  parts.push(`<div class="bs-sec">
+    <div class="bs-sec-lbl"><span class="num">${childStepNum}</span>枚举子节点 · 算 beam_score + lp · 双重 mask</div>
+    <div class="bs-beams">`);
+  for (const beam of s.beams) {
+    parts.push(`<div class="bs-beam">
+      <div class="bb-hd">${escHTML(beam.label)}</div>
+      ${beam.note ? `<div class="bb-note">${beam.note}</div>` : ''}
+      <table class="bs-tbl">
+        <tr>${(beam.rows[0].tok !== undefined ? ['token', ...beam.cols.slice(1)] : beam.cols).map(c => `<th>${c}</th>`).join('')}</tr>
+        ${beam.rows.map(r => {
+          const cls = r.win ? 'win' : (r.msk ? 'msk' : '');
+          const first = r.tok !== undefined ? r.tok : r.slot;
+          const rankBadge = r.rank ? ` <span class="chip ${r.win?'g':'o'}">topk #${r.rank}</span>` : '';
+          const cells = r.cells.map((c, idx) => idx === r.cells.length - 1
+            ? `<td>${c === 'kept' ? `<span class="chip g">kept</span>${rankBadge}` : c === 'masked' ? '<span class="chip r">masked</span>' : c}</td>`
+            : `<td>${c}</td>`).join('');
+          return `<tr class="${cls}"><td>${first}</td>${cells}</tr>`;
+        }).join('')}
+      </table>
+    </div>`);
+  }
+  parts.push(`</div></div>`);
+
+  const topkNum = s.inputs ? 3 : 2;
+  parts.push(`<div class="bs-arrow">↓ 全局 topk(beam) over B × ∑候选</div>`);
+  parts.push(`<div class="bs-sec">
+    <div class="bs-sec-lbl"><span class="num">${topkNum}</span>全局 topk(beam)</div>
+    <div class="bs-topk">
+      ${s.topk.map(t => `
+        <div class="tk ${t.inf?'inf':''}">
+          <span class="rk">#${t.rank}</span>
+          ${t.pair} → state ${t.st} · score ${t.sc}
+        </div>
+      `).join('')}
+    </div>
+  </div>`);
+
+  const outNum = s.inputs ? 4 : 3;
+  parts.push(`<div class="bs-arrow">↓</div>`);
+  parts.push(`<div class="bs-sec">
+    <div class="bs-sec-lbl"><span class="num">${outNum}</span>输出 beam (下一步输入)</div>
+    <div class="bs-cards">
+      ${s.outputs.map(c => `
+        <div class="bs-card ${c.win?'winner':''} ${c.inf?'inf':''}">
+          <div class="c-hd"><span class="bn">Beam ${c.bid}</span><span class="c-sc">score=${c.sc}</span></div>
+          <div class="c-st">state ${c.st}</div>
+          <div class="c-path">${c.path}</div>
+          ${c.leaf ? `<div class="c-leaf">→ ${c.leaf}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+    ${s.note ? `<div class="bs-note">💡 ${s.note}</div>` : ''}
+  </div>`);
+
+  root.innerHTML = parts.join('');
+}
+
+function renderBeamNav(active) {
+  const nav = document.getElementById('bs-nav');
+  nav.innerHTML = BS_STEPS.map((s, i) => {
+    const m = s.method.includes('dense_mask') ? 'Dense' :
+              s.method.includes('start_mask') ? '首 token' : `CSR·max_br=${s.maxBr}`;
+    return `<button class="bs-tab ${i===active?'on':''}" data-i="${i}">${s.title.replace(/·.*$/,'').trim()} <span class="m">${m}</span></button>`;
+  }).join('') + `<button class="bs-auto" id="bs-auto">▶ 自动播放</button>`;
+  nav.querySelectorAll('.bs-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.dataset.i);
+      renderBeamNav(i);
+      renderBeamStep(i);
+    });
+  });
+  document.getElementById('bs-auto').addEventListener('click', autoPlayBS);
+}
+
+let bsPlaying = false;
+async function autoPlayBS() {
+  if (bsPlaying) return;
+  bsPlaying = true;
+  const btn = document.getElementById('bs-auto');
+  btn.disabled = true; btn.textContent = '▶ 播放中…';
+  for (let i = 0; i < BS_STEPS.length; i++) {
+    renderBeamNav(i);
+    renderBeamStep(i);
+    await new Promise(r => setTimeout(r, 1800));
+  }
+  btn.disabled = false; btn.textContent = '▶ 自动播放';
+  bsPlaying = false;
+}
+
+renderBeamNav(0);
+renderBeamStep(0);
 
 /* ── TOC active tracking ── */
 const sections = document.querySelectorAll('section[id]');
