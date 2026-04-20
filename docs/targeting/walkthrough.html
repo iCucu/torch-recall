@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定向召回 — 端到端示例</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-0: #f8f6f3; --bg-1: #ffffff; --bg-2: #f2eeea;
+  --bg-card: #ffffff; --border: #e5ddd5; --border-light: #eee8e2;
+  --text-0: #3a3530; --text-1: #7a7168; --text-2: #b0a89f;
+  --accent: #a67c52; --accent-bg: rgba(166,124,82,.06);
+  --green: #8a8f68; --green-bg: rgba(138,143,104,.06);
+  --red: #b06a60; --red-bg: rgba(176,106,96,.05);
+  --yellow: #a08858; --yellow-bg: rgba(160,136,88,.06);
+  --purple: #8a7fa0; --purple-bg: rgba(138,127,160,.06);
+  --font: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC',sans-serif;
+  --mono: 'JetBrains Mono','SF Mono','Fira Code','Menlo',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{font-family:var(--font);background:var(--bg-0);color:var(--text-0);line-height:1.75;font-size:16px;display:grid;grid-template-columns:210px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+
+/* ── Nav ── */
+.top-nav{grid-column:1/-1;position:sticky;top:0;z-index:100;display:flex;align-items:center;padding:0 24px;gap:16px;background:rgba(248,246,243,.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-light)}
+.top-nav h1{font-size:17px;font-weight:600;white-space:nowrap}
+.top-nav .params{display:flex;gap:12px;margin-left:auto}
+.top-nav .param{font-size:13px;color:var(--text-1);font-family:var(--mono)}
+.top-nav .param b{color:var(--accent)}
+.top-nav a.back{font-size:13px;color:var(--text-1);text-decoration:none;padding:4px 10px;border-radius:6px;transition:all .15s}
+.top-nav a.back:hover{color:var(--accent);background:var(--accent-bg)}
+
+/* ── Sidebar ── */
+.sidebar{position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;padding:20px 16px;border-right:1px solid var(--border-light);font-size:14px}
+.sidebar a{display:block;padding:6px 10px;border-radius:6px;color:var(--text-1);text-decoration:none;transition:all .15s}
+.sidebar a:hover{color:var(--text-0);background:var(--bg-2)}
+.sidebar a.active{color:var(--accent);background:var(--accent-bg);font-weight:500}
+.sidebar .sub{padding-left:20px;font-size:13px}
+.sidebar .sep{height:1px;background:var(--border-light);margin:10px 8px}
+
+/* ── Main ── */
+main{padding:32px 40px 80px;max-width:1000px;overflow-x:hidden}
+section{margin-bottom:56px}
+h2{font-size:26px;font-weight:600;margin:0 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border-light)}
+h3{font-size:19px;font-weight:600;margin:24px 0 10px;color:var(--text-0)}
+h4{font-size:15px;font-weight:600;margin:14px 0 6px;color:var(--text-0)}
+p,.desc{color:var(--text-1);font-size:16px;margin-bottom:12px;max-width:760px}
+code{font-family:var(--mono);font-size:.88em;background:var(--bg-2);padding:1px 5px;border-radius:4px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── Stats ── */
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+.stat{flex:1;min-width:110px;padding:14px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px}
+.stat .val{font-size:28px;font-weight:600;color:var(--text-0)}
+.stat .lbl{font-size:12px;color:var(--text-2);margin-top:2px}
+.stat.green .val{color:var(--green)} .stat.red .val{color:var(--red)} .stat.accent .val{color:var(--accent)} .stat.yellow .val{color:var(--yellow)}
+
+/* ── Pipeline ── */
+.pipeline{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+.pipe-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;padding:0;overflow:hidden}
+.pipe-card .hd{padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-light);font-size:14px;font-weight:600}
+.pipe-card .bd{padding:12px 16px}
+.pipe-card .bd .step{font-size:14px;color:var(--text-1);padding:2px 0}
+.pipe-card .bd .step b{color:var(--text-0)}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500}
+.badge.info{background:var(--accent-bg);color:var(--accent)}
+.badge.ok{background:var(--green-bg);color:var(--green)}
+.badge.warn{background:var(--yellow-bg);color:var(--yellow)}
+
+/* ── Table ── */
+.tbl-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--border-light);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;padding:8px 12px;background:var(--bg-2);color:var(--text-1);font-weight:600;white-space:nowrap;position:sticky;top:0}
+td{padding:7px 12px;border-top:1px solid var(--border-light);vertical-align:top}
+tr:hover td{background:rgba(160,150,140,.04)}
+tr.new td{background:var(--accent-bg)}
+tr.danger td{background:var(--red-bg)}
+tr.good td{background:var(--green-bg)}
+tr.neg td{background:var(--yellow-bg)}
+td.t{color:var(--green);font-weight:600;text-align:center}
+td.f{color:var(--text-2);text-align:center}
+td.mono{font-family:var(--mono);font-size:12px}
+
+/* ── Predicate Registry Card ── */
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:14px 0}
+.pred-card{padding:10px 14px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;transition:all .2s}
+.pred-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.pred-card .pid{display:inline-block;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 7px;border-radius:99px;margin-right:6px;font-family:var(--mono)}
+.pred-card .ptype{display:inline-block;font-size:10px;color:var(--text-2);padding:1px 6px;border-radius:4px;background:var(--bg-2);font-family:var(--mono);margin-right:4px}
+.pred-card .pexpr{font-family:var(--mono);font-size:13px;color:var(--text-0);margin-top:6px;font-weight:500}
+.pred-card .pnote{font-size:11px;color:var(--text-2);margin-top:4px}
+.pred-card.from-neg{border-color:var(--yellow);background:var(--yellow-bg)}
+.pred-card.from-neg .pnote{color:var(--yellow);font-weight:500}
+
+/* ── Tensor Cell Grid ── */
+.t-grid{display:grid;gap:3px;margin:10px 0;font-family:var(--mono);font-size:12px}
+.t-row{display:flex;align-items:center;gap:6px}
+.t-row-label{font-size:11px;color:var(--text-2);min-width:62px;font-weight:600;font-family:var(--mono)}
+.t-cell{width:34px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border-light);border-radius:4px;background:var(--bg-1);color:var(--text-1);transition:all .25s;position:relative;cursor:default}
+.t-cell.t{background:var(--green-bg);border-color:var(--green);color:var(--green);font-weight:700}
+.t-cell.f{background:var(--bg-2);color:var(--text-2)}
+.t-cell.pad{background:repeating-linear-gradient(45deg,var(--bg-1),var(--bg-1) 4px,var(--bg-2) 4px,var(--bg-2) 8px);color:var(--text-2);font-size:10px;border-style:dashed}
+.t-cell.neg{outline:2px solid var(--yellow);outline-offset:-1px;color:var(--yellow);font-weight:700}
+.t-cell.flip{animation:flipBg .8s ease}
+.t-cell.id{font-size:11px}
+@keyframes flipBg {
+  0%{background:var(--bg-2);transform:scale(1)}
+  35%{background:var(--yellow-bg);transform:scale(1.18);box-shadow:0 0 12px rgba(160,136,88,.4)}
+  100%{background:var(--green-bg);transform:scale(1)}
+}
+.t-conj-row{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;transition:all .25s}
+.t-conj-row.hilite{background:var(--accent-bg)}
+.t-conj-label{font-size:11px;color:var(--text-1);min-width:90px;font-family:var(--mono);font-weight:600}
+.t-conj-result{font-size:13px;font-weight:700;font-family:var(--mono);min-width:46px;text-align:center;padding:2px 6px;border-radius:4px}
+.t-conj-result.t{color:var(--green);background:var(--green-bg)}
+.t-conj-result.f{color:var(--red);background:var(--red-bg)}
+.t-conj-result.pending{color:var(--text-2);background:var(--bg-2)}
+.t-axis{display:flex;gap:6px;align-items:center;margin-left:68px;font-size:10px;color:var(--text-2);font-family:var(--mono);margin-bottom:4px}
+.t-axis .ax{width:34px;text-align:center}
+
+/* ── Forward Step Controller ── */
+.fw-ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:12px 0 4px;padding:10px 14px;background:var(--bg-2);border-radius:8px;border:1px solid var(--border-light)}
+.fw-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-size:12px;font-family:var(--font);transition:all .15s}
+.fw-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.fw-btn:disabled{opacity:.3;cursor:not-allowed}
+.fw-dots{display:flex;gap:6px;align-items:center}
+.fw-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .3s;cursor:pointer}
+.fw-dot.on{background:var(--accent);transform:scale(1.4);box-shadow:0 0 8px rgba(166,124,82,.4)}
+.fw-dot.done{background:var(--green)}
+.fw-cap{flex:1;min-width:200px;font-size:13px;color:var(--accent);font-weight:600;line-height:1.5;padding-left:6px}
+.fw-cap .nar{font-size:11px;color:var(--text-2);font-weight:500;display:block;margin-top:1px}
+
+.fw-panel{padding:18px 22px;border:1px solid var(--border-light);border-radius:10px;background:var(--bg-card);margin:8px 0 16px}
+.fw-formula{font-family:var(--mono);font-size:12.5px;color:var(--accent);padding:10px 14px;background:var(--bg-2);border-radius:6px;margin:0 0 14px;line-height:1.7;white-space:pre;overflow-x:auto;border:1px solid var(--border-light)}
+.fw-formula .cm{color:var(--text-2)}
+.fw-formula .hl{color:var(--yellow);font-weight:700}
+.fw-explain{font-size:13px;color:var(--text-1);line-height:1.7;margin:8px 0 12px}
+.fw-explain b{color:var(--text-0)}
+.fw-explain code{font-size:12px}
+
+/* ── User Editor ── */
+.user-ed{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:14px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;margin:14px 0}
+.user-ed .ufield{display:flex;flex-direction:column;gap:4px}
+.user-ed .ufield label{font-size:11px;color:var(--text-2);font-weight:600;font-family:var(--mono)}
+.user-ed .ufield .uvalues{display:flex;gap:4px;flex-wrap:wrap}
+.user-ed .ufield button{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);cursor:pointer;font-size:13px;font-family:var(--font);transition:all .15s}
+.user-ed .ufield button.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+.user-ed .ufield input[type="number"]{width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-1);font-size:13px;font-family:var(--mono);color:var(--text-0);text-align:center}
+.user-ed .ufield input[type="number"]:focus{outline:none;border-color:var(--accent)}
+.user-ed .uhint{font-size:11px;color:var(--text-2);margin-left:auto}
+
+/* ── Predicate satisfaction badges ── */
+.psat-strip{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.psat{padding:6px 10px;border-radius:6px;border:1px solid var(--border-light);background:var(--bg-1);font-size:12px;line-height:1.4;display:flex;flex-direction:column;gap:2px;min-width:130px;transition:all .25s}
+.psat .pid{font-size:10px;color:var(--text-2);font-family:var(--mono);font-weight:600}
+.psat .pexp{font-family:var(--mono);font-size:11px;color:var(--text-1)}
+.psat .pres{font-size:13px;font-weight:700;margin-top:2px}
+.psat.t{background:var(--green-bg);border-color:var(--green)}
+.psat.t .pres{color:var(--green)}
+.psat.t .pid{color:var(--green)}
+.psat.f{background:var(--bg-1)}
+.psat.f .pres{color:var(--text-2)}
+
+/* ── Diagram boxes ── */
+.diag-grid{display:grid;grid-template-columns:1fr 40px 1.4fr 40px 1.2fr;gap:10px;align-items:center;margin:18px 0}
+.diag-box{padding:14px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;font-size:13px;line-height:1.7}
+.diag-box .dh{font-size:11px;color:var(--text-2);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px}
+.diag-box ul{list-style:none;padding:0;margin:0}
+.diag-box li{padding:3px 0;font-family:var(--mono);font-size:12px;color:var(--text-1)}
+.diag-box li b{color:var(--accent)}
+.diag-box li .neg{color:var(--yellow);font-weight:700}
+.diag-arrow{font-size:24px;color:var(--text-2);text-align:center;font-family:var(--mono)}
+@media(max-width:900px){.diag-grid{grid-template-columns:1fr;gap:6px}.diag-arrow{transform:rotate(90deg)}}
+
+/* ── Result cards ── */
+.result-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:14px 0}
+.rcard{padding:12px 14px;border:1px solid var(--border-light);border-radius:8px;background:var(--bg-1);transition:all .25s;position:relative}
+.rcard.match{border-color:var(--green);background:var(--green-bg)}
+.rcard.miss{opacity:.55}
+.rcard .rid{font-size:11px;color:var(--text-2);font-family:var(--mono);font-weight:600}
+.rcard .rrule{font-family:var(--mono);font-size:12px;color:var(--text-0);margin:4px 0;line-height:1.4;font-weight:500}
+.rcard .rstatus{font-size:13px;font-weight:700;margin-top:4px}
+.rcard.match .rstatus{color:var(--green)}
+.rcard.miss .rstatus{color:var(--red)}
+
+/* ── Code block ── */
+.code-block{font-family:var(--mono);font-size:12.5px;color:var(--text-1);line-height:1.85;padding:14px 18px;background:var(--bg-1);border:1px solid var(--border-light);border-radius:8px;margin:12px 0;overflow-x:auto;white-space:pre}
+.code-block .cm{color:var(--text-2)}
+.code-block .kw{color:var(--red)}
+.code-block .fn{color:var(--purple)}
+.code-block .str{color:var(--green)}
+.code-block .hi{background:var(--yellow-bg);color:var(--yellow);padding:1px 4px;border-radius:3px;font-weight:700}
+
+/* ── Phase header ── */
+.phase-hd{display:flex;align-items:baseline;gap:10px;margin:24px 0 8px}
+.phase-hd .num{display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--mono)}
+.phase-hd h3{margin:0}
+
+/* ── Tensor reference card ── */
+.tref-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+@media(max-width:700px){.tref-grid{grid-template-columns:1fr}}
+.tref{padding:14px 16px;border:1px solid var(--border-light);border-radius:8px;background:var(--bg-card);transition:all .2s}
+.tref:hover{border-color:var(--accent);transform:translateY(-1px)}
+.tref .th{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px}
+.tref .tn{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--accent)}
+.tref .ts{font-family:var(--mono);font-size:11px;color:var(--text-2)}
+.tref .td{font-size:13px;color:var(--text-1);margin-bottom:8px;line-height:1.6}
+.tref .tu{font-size:12px;background:var(--bg-2);border-radius:4px;padding:8px 10px;line-height:1.7;color:var(--text-1)}
+.tref .tu code{font-size:11px;color:var(--accent);background:transparent;padding:0}
+.tref .pp{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;font-family:var(--mono)}
+.tref .pp.p1{background:var(--accent-bg);color:var(--accent)}
+.tref .pp.p2{background:var(--green-bg);color:var(--green)}
+
+/* ── Key insight callout ── */
+.callout{padding:14px 18px;border-radius:8px;margin:16px 0;border-left:3px solid var(--accent);background:var(--accent-bg)}
+.callout.warn{border-color:var(--yellow);background:var(--yellow-bg)}
+.callout.warn b{color:var(--yellow)}
+.callout b{color:var(--accent)}
+.callout p{color:var(--text-1);margin:4px 0}
+
+/* ── Responsive ── */
+@media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:56px 1fr} .sidebar{display:none} main{padding:20px 16px 60px} .pipeline{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- ━━━ Top Nav ━━━ -->
+<nav class="top-nav">
+  <h1>定向召回 — 端到端示例</h1>
+  <a class="back" href="../index.html">← 返回首页</a>
+  <div class="params">
+    <span class="param">N=<b>5</b></span>
+    <span class="param">P=<b>6</b></span>
+    <span class="param">C=<b>6</b></span>
+    <span class="param">K=<b>8</b></span>
+    <span class="param">J=<b>16</b></span>
+  </div>
+</nav>
+
+<!-- ━━━ Sidebar ━━━ -->
+<aside class="sidebar">
+  <a href="#overview">概览</a>
+  <a href="#input" class="sub">输入数据</a>
+  <a href="#offline">离线构建</a>
+  <a href="#offline-p1" class="sub">Phase 1 谓词注册</a>
+  <a href="#offline-p2" class="sub">Phase 2 Conj 张量</a>
+  <a href="#offline-p3" class="sub">Phase 3 Item 张量</a>
+  <a href="#offline-summary" class="sub">两级索引总览</a>
+  <a href="#online">在线推理</a>
+  <a href="#encode" class="sub">encode_user</a>
+  <a href="#forward" class="sub">forward 逐步</a>
+  <a href="#result" class="sub">最终结果</a>
+  <div class="sep"></div>
+  <a href="#tensors">Tensor 速查</a>
+  <a href="#related">相关文档</a>
+</aside>
+
+<!-- ━━━ Main ━━━ -->
+<main>
+
+<!-- ── 概览 ── -->
+<section id="overview">
+  <h2>概览</h2>
+  <p>定向召回 (Targeting Recall) 解决「item 携带规则、用户携带属性」的反向匹配问题：
+    给定一批用户属性，从百万级候选 item 中筛出所有 targeting 规则被满足的 item。
+    本系统将所有规则编译为 <b>Two-Level Gather + Reduce</b> 的纯 tensor 操作，
+    经 AOTInductor 导出为 <code>.pt2</code>，支持亚毫秒级在线推理。</p>
+
+  <p>本示例用 <b>5 条规则 + 1 个用户</b> 完整走一遍从离线构建到在线匹配的全过程，
+    重点演示 <code>!=</code> 取反的 <b>XOR negated</b> 处理逻辑。</p>
+
+  <div class="stats">
+    <div class="stat accent"><div class="val">5</div><div class="lbl">N · item 数</div></div>
+    <div class="stat accent"><div class="val">6</div><div class="lbl">P · 唯一谓词数</div></div>
+    <div class="stat accent"><div class="val">6</div><div class="lbl">C · conjunction 数</div></div>
+    <div class="stat green"><div class="val">8 / 16</div><div class="lbl">K / J · 张量固定宽度</div></div>
+  </div>
+
+  <div class="pipeline">
+    <div class="pipe-card">
+      <div class="hd">离线构建 <span class="badge info">Offline</span></div>
+      <div class="bd">
+        <div class="step"><b>rules: list[str]</b></div>
+        <div class="step">→ Phase 1: 解析 → AST → DNF → 谓词去重</div>
+        <div class="step">→ Phase 2: 填充 conj 张量 [C, K]</div>
+        <div class="step">→ Phase 3: 填充 item 张量 [N, J]</div>
+        <div class="step">→ <code>torch.export → .pt2</code></div>
+        <div class="step"><b>= TargetingRecall (nn.Module)</b></div>
+      </div>
+    </div>
+    <div class="pipe-card">
+      <div class="hd">在线推理 <span class="badge ok">Online</span></div>
+      <div class="bd">
+        <div class="step"><b>user_attrs: dict</b></div>
+        <div class="step">→ <code>encode_user</code> → <code>pred_satisfied [P]</code></div>
+        <div class="step">→ Step 1: gather + XOR + AND → <code>conj_ok [C]</code></div>
+        <div class="step">→ Step 2: gather + AND + OR → <code>item_ok [N]</code></div>
+        <div class="step"><b>= 0.0 (匹配) / -inf (未匹配) [N]</b></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>代码文件</h3>
+  <p class="desc">所有代码位于 <code>torch_recall/recall_method/targeting/</code></p>
+  <div class="tbl-wrap"><table>
+    <tr><th>文件</th><th>职责</th></tr>
+    <tr><td class="mono">builder.py → TargetingBuilder.build()</td><td>离线构建入口（Phase 1~4）</td></tr>
+    <tr><td class="mono">builder.py → _register_predicate()</td><td>谓词去重 + <code>!=</code> 标准化为 <code>==</code> + negated</td></tr>
+    <tr><td class="mono">recall.py → TargetingRecall.forward()</td><td>在线推理：6 行 tensor 操作</td></tr>
+    <tr><td class="mono">encoder.py → encode_user()</td><td>用户属性 → <code>pred_satisfied [P] bool</code></td></tr>
+  </table></div>
+</section>
+
+<!-- ── 输入数据 ── -->
+<section id="input">
+  <h2>输入数据</h2>
+
+  <h3>5 条 item 规则</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Item</th><th>定向规则</th><th>结构</th><th>备注</th></tr>
+    <tr><td><b>item 0</b></td><td class="mono">city == "北京" AND gender == "男"</td><td>1 conj × 2 preds</td><td></td></tr>
+    <tr><td><b>item 1</b></td><td class="mono">city == "上海"</td><td>1 conj × 1 pred</td><td></td></tr>
+    <tr><td><b>item 2</b></td><td class="mono">age &gt; 18</td><td>1 conj × 1 pred</td><td></td></tr>
+    <tr><td><b>item 3</b></td><td class="mono">(city == "北京" OR city == "上海") AND age &gt;= 25</td><td>2 conj × 2 preds</td><td style="color:var(--accent)">DNF 展开为 OR</td></tr>
+    <tr class="neg"><td><b>item 4</b></td><td class="mono">city != "广州" AND age &gt; 18</td><td>1 conj × 2 preds</td><td style="color:var(--yellow)"><b>含 != 取反</b></td></tr>
+  </table></div>
+
+  <h3>Schema</h3>
+  <div class="code-block"><span class="kw">schema</span> = Schema(
+    discrete_fields=[<span class="str">"city"</span>, <span class="str">"gender"</span>],
+    numeric_fields=[<span class="str">"age"</span>],
+    text_fields=[],
+)</div>
+
+  <h3>用户属性</h3>
+  <div class="code-block"><span class="kw">user</span> = {<span class="str">"city"</span>: <span class="str">"北京"</span>, <span class="str">"gender"</span>: <span class="str">"男"</span>, <span class="str">"age"</span>: 30}</div>
+
+  <p class="desc">此用户应匹配 item <b>0, 2, 3, 4</b>（北京男性、年龄 30 满足 &gt; 18 和 &gt;= 25、且不在广州）。</p>
+</section>
+
+<!-- ── 离线构建 ── -->
+<section id="offline">
+  <h2>离线构建 (TargetingBuilder.build)</h2>
+
+  <!-- ══════ Phase 1 ══════ -->
+  <div class="phase-hd"><span class="num">1</span><h3 id="offline-p1">解析规则 → DNF → 谓词注册</h3></div>
+  <p>逐条规则解析为 AST → DNF（析取范式 = OR of ANDs），同时收集所有原子谓词去重分配 <code>pred_id</code>。
+    <code>!=</code> 在解析阶段统一为 <code>==</code> + <code>negated=True</code>，注册表中只存正向谓词。</p>
+
+  <h4>逐条 DNF 转换</h4>
+  <div class="code-block"><span class="cm"># item 0: city=="北京" AND gender=="男"</span>
+DNF = [[city=="北京", gender=="男"]]                   <span class="cm"># 1 conj, 2 preds</span>
+
+<span class="cm"># item 1: city=="上海"</span>
+DNF = [[city=="上海"]]                                  <span class="cm"># 1 conj, 1 pred</span>
+
+<span class="cm"># item 2: age &gt; 18</span>
+DNF = [[age&gt;18]]                                       <span class="cm"># 1 conj, 1 pred</span>
+
+<span class="cm"># item 3: (city=="北京" OR city=="上海") AND age&gt;=25</span>
+DNF = [[city=="北京", age&gt;=25],
+       [city=="上海", age&gt;=25]]                         <span class="cm"># 2 conj × 2 preds (OR 展开)</span>
+
+<span class="cm"># item 4: city!="广州" AND age&gt;18                       ← 关键: 含 !=</span>
+DNF = [[city=="广州"<span class="hi">(negated!)</span>, age&gt;18]]               <span class="cm"># 注册时标准化: != → == + negated=True</span></div>
+
+  <h4>谓词注册表 (去重后 P=6)</h4>
+  <div class="pred-grid">
+    <div class="pred-card"><div><span class="pid">0</span><span class="ptype">discrete</span></div><div class="pexpr">city == "北京"</div><div class="pnote">来自 item 0, 3</div></div>
+    <div class="pred-card"><div><span class="pid">1</span><span class="ptype">discrete</span></div><div class="pexpr">gender == "男"</div><div class="pnote">来自 item 0</div></div>
+    <div class="pred-card"><div><span class="pid">2</span><span class="ptype">discrete</span></div><div class="pexpr">city == "上海"</div><div class="pnote">来自 item 1, 3</div></div>
+    <div class="pred-card"><div><span class="pid">3</span><span class="ptype">numeric</span></div><div class="pexpr">age &gt; 18</div><div class="pnote">来自 item 2, 4</div></div>
+    <div class="pred-card"><div><span class="pid">4</span><span class="ptype">numeric</span></div><div class="pexpr">age &gt;= 25</div><div class="pnote">来自 item 3</div></div>
+    <div class="pred-card from-neg"><div><span class="pid">5</span><span class="ptype">discrete</span></div><div class="pexpr">city == "广州"</div><div class="pnote">★ 由 item 4 的 <code>!=</code> 标准化而来</div></div>
+  </div>
+
+  <div class="callout warn">
+    <b>关键观察 — != 不是新谓词类型</b>
+    <p>注册表里只有 <code>==</code> 一种正向谓词。<code>city != "广州"</code> 没有产生独立的 <code>!=</code> 谓词，
+       而是注册为 <code>city == "广州"</code> (pred 5)，把取反信息放到 conjunction 的 <code>negated</code> 位上 —
+       这样 forward() 中只需一次 <code>XOR</code> 就能统一处理 <code>==</code> 和 <code>!=</code>。</p>
+  </div>
+
+  <!-- ══════ Phase 2 ══════ -->
+  <div class="phase-hd"><span class="num">2</span><h3 id="offline-p2">构建 Conjunction 张量 [C, K]</h3></div>
+  <p>把所有 item 的 conjunction 扁平化收集为 C=6 条，每条包含一组 <code>(pred_id, negated)</code>。
+    填入三个固定宽度 <code>[C, K]</code> 张量（K=8）。</p>
+
+  <h4>扁平化 (item_conjs → all_conj_preds)</h4>
+  <div class="code-block">all_conj_preds = []          <span class="cm"># 全局 conjunction 数组</span>
+item_conj_offsets = []       <span class="cm"># 每个 item 的 conj 全局编号</span>
+
+<span class="kw">for</span> conjs <span class="kw">in</span> item_conjs:
+    offsets = []
+    <span class="kw">for</span> conj <span class="kw">in</span> conjs:
+        offsets.append(len(all_conj_preds))
+        all_conj_preds.append(conj)
+    item_conj_offsets.append(offsets)
+
+<span class="cm"># 结果:</span>
+<span class="cm"># item_conj_offsets = [[0], [1], [2], [3, 4], [5]]   ← item 3 拥有 2 个 conj</span>
+<span class="cm"># C = 6</span></div>
+
+  <h4>填充三个 [C=6, K=8] 张量</h4>
+  <p class="desc">绿色 = True/有效；条纹 = padding；黄色边框 = <code>negated=True</code>。</p>
+
+  <div id="conj-tensor-vis"></div>
+
+  <div class="callout">
+    <b>为什么需要固定宽度 K=8？</b>
+    <p><code>torch.export</code> 要求所有张量形状在编译时确定。如果 conj 的谓词数不固定，无法导出为 <code>.pt2</code>。
+       K=8 = 单条 conj 最多 8 个谓词；padding 槽位的 <code>ids=0</code> 是无意义默认值 —
+       forward() 会通过 <code>| ~valid</code> 把它们设为 True，让它们不影响 AND 规约。</p>
+  </div>
+
+  <!-- ══════ Phase 3 ══════ -->
+  <div class="phase-hd"><span class="num">3</span><h3 id="offline-p3">构建 Item-Conjunction 张量 [N, J]</h3></div>
+  <p>用 Phase 2 记录的 <code>item_conj_offsets</code> 把 item → conjunction 的引用关系写入两个固定宽度 <code>[N, J]</code> 张量（J=16）。</p>
+
+  <div id="item-tensor-vis"></div>
+
+  <p class="desc">item 3 是唯一拥有多个 conjunction 的 item（OR 关系）；其余 item 各引用 1 条 conj。
+    item 4 引用 conj 5 — 即包含 <code>negated=True</code> 槽位的那一条。J=16 的逻辑同 K=8，固定宽度 + validity mask 满足 <code>torch.export</code> 静态形状约束。</p>
+
+  <!-- ══════ Summary ══════ -->
+  <div class="phase-hd"><span class="num">★</span><h3 id="offline-summary">两级索引结构总览</h3></div>
+  <p class="desc">三段连续的 ID 空间，通过两次 gather 串联起来：</p>
+
+  <div class="diag-grid">
+    <div class="diag-box">
+      <div class="dh">谓词注册表</div>
+      <ul>
+        <li><b>0</b>: city=="北京"</li>
+        <li><b>1</b>: gender=="男"</li>
+        <li><b>2</b>: city=="上海"</li>
+        <li><b>3</b>: age &gt; 18</li>
+        <li><b>4</b>: age &gt;= 25</li>
+        <li><b>5</b>: city=="广州"</li>
+      </ul>
+      <div style="font-size:11px;color:var(--text-2);margin-top:8px">P = 6 唯一谓词</div>
+    </div>
+    <div class="diag-arrow">→</div>
+    <div class="diag-box">
+      <div class="dh">Conj 张量 [C=6, K=8]</div>
+      <ul>
+        <li><b>conj 0</b>: [0, 1]</li>
+        <li><b>conj 1</b>: [2]</li>
+        <li><b>conj 2</b>: [3]</li>
+        <li><b>conj 3</b>: [0, 4]</li>
+        <li><b>conj 4</b>: [2, 4]</li>
+        <li><b>conj 5</b>: [<span class="neg">5̄</span>, 3]</li>
+      </ul>
+      <div style="font-size:11px;color:var(--text-2);margin-top:8px">5̄ = pred 5 取反 (negated=True)</div>
+    </div>
+    <div class="diag-arrow">→</div>
+    <div class="diag-box">
+      <div class="dh">Item 张量 [N=5, J=16]</div>
+      <ul>
+        <li><b>item 0</b>: [0]</li>
+        <li><b>item 1</b>: [1]</li>
+        <li><b>item 2</b>: [2]</li>
+        <li><b>item 3</b>: [3, 4]</li>
+        <li><b>item 4</b>: [5]</li>
+      </ul>
+      <div style="font-size:11px;color:var(--text-2);margin-top:8px">N = 5 个 item</div>
+    </div>
+  </div>
+
+  <div class="code-block"><span class="cm"># forward() 时:</span>
+Level 1: pred_satisfied[P]  → gather by conj_pred_ids → [C, K] → XOR neg → AND → conj_ok[C]
+Level 2: conj_ok[C]         → gather by item_conj_ids → [N, J] → OR  → item_ok[N]</div>
+</section>
+
+<!-- ── 在线推理 ── -->
+<section id="online">
+  <h2>在线推理</h2>
+
+  <!-- ══════ encode_user ══════ -->
+  <div class="phase-hd"><span class="num">A</span><h3 id="encode">encode_user — 用户属性 → pred_satisfied</h3></div>
+  <p>对照谓词注册表逐个评估，得到 <code>pred_satisfied [P=6] bool</code>。可点击下方修改用户属性，实时观察影响。</p>
+
+  <div class="user-ed" id="user-ed">
+    <div class="ufield">
+      <label>city</label>
+      <div class="uvalues" data-field="city">
+        <button data-val="北京">北京</button>
+        <button data-val="上海">上海</button>
+        <button data-val="广州">广州</button>
+        <button data-val="深圳">深圳</button>
+      </div>
+    </div>
+    <div class="ufield">
+      <label>gender</label>
+      <div class="uvalues" data-field="gender">
+        <button data-val="男">男</button>
+        <button data-val="女">女</button>
+      </div>
+    </div>
+    <div class="ufield">
+      <label>age</label>
+      <input type="number" id="age-input" min="0" max="100" step="1">
+    </div>
+    <div class="uhint">默认: city="北京", gender="男", age=30</div>
+  </div>
+
+  <h4>评估每条谓词</h4>
+  <div class="psat-strip" id="psat-strip"></div>
+
+  <div class="callout warn">
+    <b>注意 — pred 5 评估的是 <code>city == "广州"</code></b>
+    <p>encode_user 完全不知道有 "<code>!=</code>" 的概念，它只评估正向谓词。
+       默认用户 city="北京" → pred 5 = <span style="color:var(--red)">False</span>。
+       取反逻辑要等 forward() 的 XOR 一步处理。</p>
+  </div>
+
+  <!-- ══════ forward ══════ -->
+  <div class="phase-hd"><span class="num">B</span><h3 id="forward">forward() — 6 行 tensor 操作</h3></div>
+  <p>整个推理 = <b>2 次 gather + 2 次 reduce</b>，共 6 个子步。点击下方按钮逐步观察每一步的张量变化。</p>
+
+  <div class="fw-ctl">
+    <button class="fw-btn" id="fw-prev">◀ 上一步</button>
+    <div class="fw-dots" id="fw-dots"></div>
+    <button class="fw-btn" id="fw-next">下一步 ▶</button>
+    <div class="fw-cap" id="fw-cap"></div>
+  </div>
+
+  <div class="fw-panel" id="fw-panel"></div>
+
+  <p class="desc"><b>关键不对称：</b>
+    <code>conj.padding</code> 用 <code>| ~valid</code> 设为 <span style="color:var(--green)">True</span>（AND 单位元，不影响 all 结果）；
+    <code>item.padding</code> 用 <code>&amp; valid</code> 设为 <span style="color:var(--red)">False</span>（OR 零元，不影响 any 结果）。</p>
+
+  <!-- ══════ Final Result ══════ -->
+  <div class="phase-hd"><span class="num">★</span><h3 id="result">最终结果</h3></div>
+  <p class="desc">默认用户 (北京/男/30) → 匹配 <b>item 0, 2, 3, 4</b>，过滤 item 1。修改上方用户属性可实时观察结果变化。</p>
+  <div class="result-cards" id="result-cards"></div>
+
+  <h4>item 4 的关键路径（<code>!=</code> 取反）</h4>
+  <div class="code-block">city != "广州"
+   ↓ <span class="cm">注册阶段:</span>
+city == "广州" (pred 5) + negated=True
+   ↓ <span class="cm">encode_user:</span>
+pred_satisfied[5] = False  <span class="cm"># 用户 city="北京", 不在广州</span>
+   ↓ <span class="cm">forward gather:</span>
+sat[conj 5, k=0] = pred_satisfied[5] = False
+   ↓ <span class="cm">forward XOR negated:</span>
+<span class="hi">False XOR True = True</span>  ← 取反翻转! "用户不在广州" 成立
+   ↓ <span class="cm">AND age&gt;18(True):</span>
+conj 5 = True → item 4 ✓</div>
+</section>
+
+<!-- ── Tensor 速查 ── -->
+<section id="tensors">
+  <h2>Tensor 速查</h2>
+  <h3>离线构建的 Tensor (registered buffer)</h3>
+  <div class="tref-grid">
+
+    <div class="tref">
+      <div class="th"><span class="tn">conj_pred_ids</span><span class="ts">[C, K] int64</span></div>
+      <div class="td">每条 conjunction 引用的谓词 ID。padding 槽位填 0（无意义）。</div>
+      <div class="tu">
+        <code>sat = pred_satisfied[:, conj_pred_ids]</code><br>
+        <span style="font-size:11px;color:var(--text-2)">本例: [6, 8]，仅前 2 列有真实值</span>
+      </div>
+    </div>
+
+    <div class="tref">
+      <div class="th"><span class="tn">conj_pred_negated</span><span class="ts">[C, K] bool</span></div>
+      <div class="td">该谓词是否取反。<code>!=</code> 标准化后这里为 True，其余为 False。</div>
+      <div class="tu">
+        <code>sat = sat ^ conj_pred_negated</code><br>
+        <span style="font-size:11px;color:var(--text-2)">本例: 仅 conj 5 的 k=0 位为 True</span>
+      </div>
+    </div>
+
+    <div class="tref">
+      <div class="th"><span class="tn">conj_pred_valid</span><span class="ts">[C, K] bool</span></div>
+      <div class="td">槽位是否有效。padding 位为 False；用 <code>| ~valid</code> 把 padding 设为 True（AND 单位元）。</div>
+      <div class="tu">
+        <code>sat = sat | ~conj_pred_valid</code><br>
+        <span style="font-size:11px;color:var(--text-2)">本例: 多数 conj 仅 k=0~1 有效</span>
+      </div>
+    </div>
+
+    <div class="tref">
+      <div class="th"><span class="tn">item_conj_ids</span><span class="ts">[N, J] int64</span></div>
+      <div class="td">每个 item 引用的 conjunction 全局编号。多 conj 时表示 OR 关系。</div>
+      <div class="tu">
+        <code>item_conj_ok = conj_ok[:, item_conj_ids]</code><br>
+        <span style="font-size:11px;color:var(--text-2)">本例: [5, 16]，item 3 引用 [3, 4]</span>
+      </div>
+    </div>
+
+    <div class="tref">
+      <div class="th"><span class="tn">item_conj_valid</span><span class="ts">[N, J] bool</span></div>
+      <div class="td">item 的 conj 槽位是否有效。padding 位为 False；用 <code>&amp; valid</code> 把 padding 设为 False（OR 零元）。</div>
+      <div class="tu">
+        <code>item_conj_ok = item_conj_ok &amp; item_conj_valid</code><br>
+        <span style="font-size:11px;color:var(--text-2)">本例: 仅前 1~2 列有效</span>
+      </div>
+    </div>
+
+    <div class="tref">
+      <div class="th"><span class="tn">pred_satisfied</span><span class="ts">[B, P] bool · 输入</span></div>
+      <div class="td">用户编码结果，唯一动态输入。Python 侧 <code>encode_user</code> 生成；C++ 侧从 <code>tensors.pt</code> 加载。</div>
+      <div class="tu">
+        <code>def forward(self, pred_satisfied, query):</code><br>
+        <span style="font-size:11px;color:var(--text-2)">query 参数被忽略（统一接口需要）</span>
+      </div>
+    </div>
+
+  </div>
+
+  <h3>推理过程的中间 Tensor</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Tensor</th><th>形状</th><th>含义</th><th>来源</th></tr>
+    <tr><td class="mono">sat (gather)</td><td class="mono">[B, C, K] bool</td><td>每条 conj 引用的 K 个谓词的当前满足情况</td><td>Step 1a: <code>pred_satisfied[:, conj_pred_ids]</code></td></tr>
+    <tr><td class="mono">sat (xor)</td><td class="mono">[B, C, K] bool</td><td>处理 NOT 之后</td><td>Step 1b: <code>sat ^ conj_pred_negated</code></td></tr>
+    <tr><td class="mono">sat (or-pad)</td><td class="mono">[B, C, K] bool</td><td>padding 位设为 True</td><td>Step 1c: <code>sat | ~conj_pred_valid</code></td></tr>
+    <tr><td class="mono">conj_ok</td><td class="mono">[B, C] bool</td><td>每条 conjunction 是否所有谓词都满足</td><td>Step 1d: <code>sat.all(dim=2)</code></td></tr>
+    <tr><td class="mono">item_conj_ok</td><td class="mono">[B, N, J] bool</td><td>每个 item 的各 conj 是否满足（含 padding）</td><td>Step 2a: <code>conj_ok[:, item_conj_ids]</code></td></tr>
+    <tr><td class="mono">item_ok</td><td class="mono">[B, N] bool</td><td>每个 item 是否最终匹配</td><td>Step 2b: <code>(... &amp; item_conj_valid).any(dim=2)</code></td></tr>
+    <tr><td class="mono">scores</td><td class="mono">[B, N] float</td><td>0.0 (匹配) / -inf (未匹配)</td><td><code>torch.where(item_ok, 0.0, -inf)</code></td></tr>
+  </table></div>
+  <p class="desc">B=batch 大小，本示例 B=1。所有维度都是静态形状，可被 AOTInductor 编译。</p>
+
+  <h3>本例构建结果</h3>
+  <div class="stats">
+    <div class="stat green"><div class="val">5</div><div class="lbl">N · item 数</div></div>
+    <div class="stat green"><div class="val">6</div><div class="lbl">P · 唯一谓词数</div></div>
+    <div class="stat green"><div class="val">6</div><div class="lbl">C · conjunction 总数</div></div>
+    <div class="stat green"><div class="val">1</div><div class="lbl">含 negated 的 conj 数</div></div>
+  </div>
+</section>
+
+<!-- ── 相关文档 ── -->
+<section id="related">
+  <h2>相关文档</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>文档</th><th>内容</th></tr>
+    <tr><td><a href="design.md">design.md</a></td><td>设计原理、Two-Level Gather + Reduce 架构、内存估算</td></tr>
+    <tr><td><a href="implementation.md">implementation.md</a></td><td>各模块实现、TargetingBuilder / TargetingRecall / encode_user 详解</td></tr>
+    <tr><td><a href="walkthrough.md">walkthrough.md</a></td><td>本示例的纯 Markdown 版本（更详细的文字推导）</td></tr>
+    <tr><td><a href="benchmark.md">benchmark.md</a></td><td>性能测试结果与分析</td></tr>
+    <tr><td><a href="../architecture.md">architecture.md</a></td><td>整体框架架构、Pipeline 编译、共享组件</td></tr>
+    <tr><td><a href="../generative/walkthrough.html">生成式召回 · 交互示例</a></td><td>姊妹篇：Trie + Beam Search 的可视化演示</td></tr>
+  </table></div>
+</section>
+
+</main>
+
+<!-- ━━━━━ Script ━━━━━ -->
+<script>
+/* ═══════════ 数据定义 ═══════════ */
+const PREDS = [
+  { id: 0, type: 'discrete', field: 'city',   op: '==', value: '北京', expr: 'city == "北京"' },
+  { id: 1, type: 'discrete', field: 'gender', op: '==', value: '男',   expr: 'gender == "男"' },
+  { id: 2, type: 'discrete', field: 'city',   op: '==', value: '上海', expr: 'city == "上海"' },
+  { id: 3, type: 'numeric',  field: 'age',    op: '>',  value: 18,    expr: 'age > 18' },
+  { id: 4, type: 'numeric',  field: 'age',    op: '>=', value: 25,    expr: 'age >= 25' },
+  { id: 5, type: 'discrete', field: 'city',   op: '==', value: '广州', expr: 'city == "广州"' },
+];
+
+/* conj_pred_ids[C=6, K=8], conj_pred_negated[C, K], conj_pred_valid[C, K] */
+const C = 6, K = 8, N = 5, J = 16;
+const CONJ = [
+  { id: 0, preds: [{id:0,n:false},{id:1,n:false}] },        /* item 0 */
+  { id: 1, preds: [{id:2,n:false}] },                        /* item 1 */
+  { id: 2, preds: [{id:3,n:false}] },                        /* item 2 */
+  { id: 3, preds: [{id:0,n:false},{id:4,n:false}] },         /* item 3 a */
+  { id: 4, preds: [{id:2,n:false},{id:4,n:false}] },         /* item 3 b */
+  { id: 5, preds: [{id:5,n:true},{id:3,n:false}] },          /* item 4 ★ */
+];
+const ITEMS = [
+  { id: 0, rule: 'city == "北京" AND gender == "男"',                       conjs: [0] },
+  { id: 1, rule: 'city == "上海"',                                          conjs: [1] },
+  { id: 2, rule: 'age > 18',                                                conjs: [2] },
+  { id: 3, rule: '(city == "北京" OR city == "上海") AND age >= 25',        conjs: [3, 4] },
+  { id: 4, rule: 'city != "广州" AND age > 18',                             conjs: [5] },
+];
+
+/* ═══════════ 渲染 conj 张量 ═══════════ */
+function renderConjTensor() {
+  const root = document.getElementById('conj-tensor-vis');
+  const tables = [
+    { name: 'conj_pred_ids',     desc: '哪些谓词',
+      cellFn: (ci, ki) => {
+        const pr = CONJ[ci].preds[ki];
+        if (!pr) return { text: '0', cls: 'pad' };
+        return { text: pr.id, cls: 'id' };
+      }},
+    { name: 'conj_pred_negated', desc: '是否取反',
+      cellFn: (ci, ki) => {
+        const pr = CONJ[ci].preds[ki];
+        if (!pr) return { text: 'F', cls: 'pad' };
+        return { text: pr.n ? 'T' : 'F', cls: pr.n ? 'neg t' : 'f' };
+      }},
+    { name: 'conj_pred_valid',   desc: '哪些槽有效',
+      cellFn: (ci, ki) => {
+        const pr = CONJ[ci].preds[ki];
+        return { text: pr ? 'T' : 'F', cls: pr ? 't' : 'pad' };
+      }},
+  ];
+
+  let html = '';
+  tables.forEach(t => {
+    html += `<div style="margin:14px 0">
+      <div style="font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:600;margin-bottom:4px">${t.name}<span style="color:var(--text-2);font-weight:400;margin-left:8px">${t.desc} · [C=6, K=8]</span></div>`;
+    /* axis */
+    html += '<div class="t-axis">';
+    for (let k = 0; k < K; k++) html += `<span class="ax">k=${k}</span>`;
+    html += '</div>';
+    /* rows */
+    html += '<div class="t-grid">';
+    for (let ci = 0; ci < C; ci++) {
+      html += `<div class="t-row"><span class="t-row-label">conj ${ci}</span>`;
+      for (let ki = 0; ki < K; ki++) {
+        const c = t.cellFn(ci, ki);
+        html += `<div class="t-cell ${c.cls}">${c.text}</div>`;
+      }
+      const note = ci === 5 ? ' ← <b style="color:var(--yellow)">含 negated!</b>' : '';
+      html += `<span style="font-size:11px;color:var(--text-2);margin-left:6px">${note}</span></div>`;
+    }
+    html += '</div></div>';
+  });
+  root.innerHTML = html;
+}
+renderConjTensor();
+
+/* ═══════════ 渲染 item 张量 ═══════════ */
+function renderItemTensor() {
+  const root = document.getElementById('item-tensor-vis');
+  /* item_conj_ids and item_conj_valid (only show first 4 columns of J=16 to save space) */
+  const SHOW_J = 4;
+  const tables = [
+    { name: 'item_conj_ids', desc: 'item → conj 编号',
+      cellFn: (ni, ji) => {
+        const cid = ITEMS[ni].conjs[ji];
+        if (cid === undefined) return { text: '0', cls: 'pad' };
+        return { text: cid, cls: 'id t' };
+      }},
+    { name: 'item_conj_valid', desc: '哪些 conj 槽有效',
+      cellFn: (ni, ji) => {
+        const cid = ITEMS[ni].conjs[ji];
+        return { text: cid !== undefined ? 'T' : 'F', cls: cid !== undefined ? 't' : 'pad' };
+      }},
+  ];
+
+  let html = '';
+  tables.forEach(t => {
+    html += `<div style="margin:14px 0">
+      <div style="font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:600;margin-bottom:4px">${t.name}<span style="color:var(--text-2);font-weight:400;margin-left:8px">${t.desc} · [N=5, J=16]（仅显示前 ${SHOW_J} 列，j=${SHOW_J}~15 全为 padding）</span></div>`;
+    html += '<div class="t-axis">';
+    for (let j = 0; j < SHOW_J; j++) html += `<span class="ax">j=${j}</span>`;
+    html += '<span style="margin-left:8px;color:var(--text-2)">…</span>';
+    html += '</div>';
+    html += '<div class="t-grid">';
+    for (let ni = 0; ni < N; ni++) {
+      html += `<div class="t-row"><span class="t-row-label">item ${ni}</span>`;
+      for (let ji = 0; ji < SHOW_J; ji++) {
+        const c = t.cellFn(ni, ji);
+        html += `<div class="t-cell ${c.cls}">${c.text}</div>`;
+      }
+      html += '<span style="font-size:11px;color:var(--text-2);margin-left:6px">…</span>';
+      const note = ni === 3 ? ' ← <b style="color:var(--accent)">2 个 conj (OR)</b>' : (ni === 4 ? ' ← 引用含 negated 的 conj 5' : '');
+      html += `<span style="font-size:11px;color:var(--text-1);margin-left:6px">${note}</span></div>`;
+    }
+    html += '</div></div>';
+  });
+  root.innerHTML = html;
+}
+renderItemTensor();
+
+/* ═══════════ 用户编辑器 + pred_satisfied ═══════════ */
+let user = { city: '北京', gender: '男', age: 30 };
+
+function evalPred(p, u) {
+  const v = u[p.field];
+  if (v === undefined) return false;
+  if (p.type === 'discrete') return v === p.value;
+  if (p.type === 'numeric') {
+    switch (p.op) {
+      case '>': return v > p.value;
+      case '>=': return v >= p.value;
+      case '<': return v < p.value;
+      case '<=': return v <= p.value;
+      case '==': return v === p.value;
+    }
+  }
+  return false;
+}
+
+function predSatisfied() {
+  return PREDS.map(p => evalPred(p, user));
+}
+
+function renderUserEd() {
+  document.querySelectorAll('#user-ed .uvalues').forEach(box => {
+    const f = box.dataset.field;
+    box.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.val === user[f]);
+      b.onclick = () => { user[f] = b.dataset.val; refresh(); };
+    });
+  });
+  const ageInput = document.getElementById('age-input');
+  ageInput.value = user.age;
+  ageInput.oninput = e => { user.age = +e.target.value; refresh(); };
+}
+
+function renderPsat() {
+  const sat = predSatisfied();
+  const root = document.getElementById('psat-strip');
+  let html = '';
+  PREDS.forEach((p, i) => {
+    const t = sat[i];
+    html += `<div class="psat ${t ? 't' : 'f'}">
+      <span class="pid">pred ${p.id}</span>
+      <span class="pexp">${p.expr}</span>
+      <span class="pres">${t ? '✓ True' : '✗ False'}</span>
+    </div>`;
+  });
+  root.innerHTML = html;
+}
+
+/* ═══════════ Forward 步进控制器 ═══════════ */
+const FW_STEPS = [
+  {
+    title: 'Step 1a: gather pred → [C, K]',
+    nar: 'pred_satisfied 按 conj_pred_ids 索引取出',
+    formula: 'sat = pred_satisfied[:, conj_pred_ids]   <span class="cm"># [B, C, K]</span>',
+    explain: '把每条 conj 引用的 K 个谓词的当前满足情况「拉」出来，组成 <code>[C, K]</code> 矩阵。padding 槽位的 ids=0 也被一并 gather，但接下来的 OR ~valid 步会把它们覆盖掉。',
+  },
+  {
+    title: 'Step 1b: XOR negated — 处理 NOT',
+    nar: '对 negated=True 的位翻转',
+    formula: 'sat = sat ^ conj_pred_negated   <span class="cm"># 翻转 negated=True 的位</span>',
+    explain: '<b>整段流程的关键</b>。pred 5 (city=="广州") 在 encode_user 中评估为 False（用户在北京），但 conj 5 中它被标记为 negated=True，所以这里 <span class="hl">F XOR T = T</span> — 等价于「<code>NOT (city=="广州")</code>」。其余 conj 的 negated 全为 False，XOR 不改变值。',
+  },
+  {
+    title: 'Step 1c: OR ~valid — padding 设为 True',
+    nar: 'padding 位 → True (AND 单位元)',
+    formula: 'sat = sat | ~conj_pred_valid   <span class="cm"># padding → True</span>',
+    explain: '把 padding 槽位（valid=False）的位强制设为 True。因为下一步是 <code>all(dim=2)</code> 做 AND 规约，True 是 AND 的单位元（<code>x AND True = x</code>），所以这些 padding 位不会影响结果。真实槽位（valid=True）保持原值。',
+  },
+  {
+    title: 'Step 1d: AND 规约 → conj_ok [C]',
+    nar: '每条 conj 内所有谓词都满足？',
+    formula: 'conj_ok = sat.all(dim=2)   <span class="cm"># [B, C]</span>',
+    explain: '沿 K 维做 AND 规约。一条 conj 中所有真实谓词（且 padding 已被 OR 成 True）都必须为 True，整个 conj 才为 True。<b>验证：</b>conj 5 经过 XOR 翻转后两个真实位都是 True → conj_ok[5] = True，意味着 item 4 的 (city != 广州) AND (age > 18) 成立。',
+  },
+  {
+    title: 'Step 2a: gather conj → [N, J]',
+    nar: 'conj_ok 按 item_conj_ids 索引',
+    formula: 'item_conj_ok = conj_ok[:, item_conj_ids]   <span class="cm"># [B, N, J]</span>',
+    explain: '把每个 item 引用的 J 个 conj 的结果「拉」出来。item 3 引用了 conj 3 和 conj 4 — 这两个共同表达 <code>(city == "北京" OR city == "上海") AND age >= 25</code>。其余 item 各引用 1 个 conj，剩下的 J-1 槽都是 padding。',
+  },
+  {
+    title: 'Step 2b: AND valid + OR 规约 → item_ok [N]',
+    nar: 'padding → False，再做 OR',
+    formula: 'item_conj_ok = item_conj_ok &amp; item_conj_valid   <span class="cm"># padding → False</span>\nitem_ok = item_conj_ok.any(dim=2)            <span class="cm"># [B, N]</span>',
+    explain: '与 Step 1c 不对称：item 维是 OR 关系，padding 应设为 False（OR 零元 <code>x OR False = x</code>）。最终 <code>any(dim=2)</code> 任一 conj 满足即为 True。<b>结果：</b>item_ok = [T, F, T, T, T]（默认用户）— item 1 (上海) 不匹配，其余全匹配。',
+  },
+];
+
+let fwStep = 0;
+
+function computeFwState() {
+  const sat = predSatisfied();
+  /* gather: [C][K] */
+  const gather = CONJ.map(c => {
+    const row = new Array(K).fill(null);
+    c.preds.forEach((p, k) => row[k] = sat[p.id]);
+    return row;
+  });
+  /* xor: */
+  const xor = CONJ.map((c, ci) => {
+    const row = gather[ci].slice();
+    c.preds.forEach((p, k) => { if (p.n) row[k] = !row[k]; });
+    return row;
+  });
+  /* or-pad: */
+  const orPad = CONJ.map((c, ci) => {
+    const row = xor[ci].slice();
+    for (let k = c.preds.length; k < K; k++) row[k] = true;
+    return row;
+  });
+  /* conj_ok: */
+  const conjOk = orPad.map(row => row.every(v => v === true));
+  /* item gather + AND valid + any: */
+  const itemConjOk = ITEMS.map(it => {
+    const row = new Array(J).fill(null);
+    it.conjs.forEach((cid, j) => row[j] = conjOk[cid]);
+    return row;
+  });
+  const itemOk = ITEMS.map(it => it.conjs.some(cid => conjOk[cid]));
+  return { sat, gather, xor, orPad, conjOk, itemConjOk, itemOk };
+}
+
+function renderCellGrid(rows, opts) {
+  /* opts: { rowLabels, axisLabel(k=, j=), highlightRow, padDef ('T' | 'F'), padCls }*/
+  const w = opts.width || rows[0].length;
+  let html = '<div class="t-axis">';
+  for (let k = 0; k < w; k++) html += `<span class="ax">${opts.axisLabel}=${k}</span>`;
+  html += '</div><div class="t-grid">';
+  rows.forEach((row, ri) => {
+    const isHi = opts.highlightRow !== undefined && opts.highlightRow === ri;
+    html += `<div class="t-row"><span class="t-row-label">${opts.rowLabels[ri]}</span>`;
+    for (let k = 0; k < w; k++) {
+      const v = row[k];
+      let cls = '', text = '';
+      if (v === null) {
+        cls = 'pad'; text = opts.padDef || 'F';
+        if (opts.padCls) cls += ' ' + opts.padCls;
+      } else if (v === true) {
+        cls = 't'; text = 'T';
+      } else if (v === false) {
+        cls = 'f'; text = 'F';
+      } else {
+        cls = 'id'; text = v;
+      }
+      /* mark negated cells in conj 5 (k=0) for relevant steps */
+      if (opts.markNeg && opts.markNeg(ri, k)) cls += ' neg';
+      if (opts.flashCells && opts.flashCells(ri, k)) cls += ' flip';
+      html += `<div class="t-cell ${cls}">${text}</div>`;
+    }
+    if (opts.notes && opts.notes[ri]) {
+      html += `<span style="font-size:11px;color:var(--text-1);margin-left:6px">${opts.notes[ri]}</span>`;
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderResultColumn(values, labels, opts) {
+  /* render a vertical column of result cells */
+  let html = '<div style="display:flex;flex-direction:column;gap:6px;margin:8px 0">';
+  values.forEach((v, i) => {
+    const cls = v === true ? 't' : 'f';
+    const text = v === true ? '✓ T' : '✗ F';
+    html += `<div class="t-conj-row"><span class="t-conj-label">${labels[i]}</span><span class="t-conj-result ${cls}">${text}</span></div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderFwPanel() {
+  const s = FW_STEPS[fwStep];
+  const st = computeFwState();
+  const conjLabels = CONJ.map((c, i) => `conj ${i}`);
+  const itemLabels = ITEMS.map((it, i) => `item ${i}`);
+  let body = '';
+
+  if (fwStep === 0) {
+    /* gather: show [C, K] of pred_satisfied values */
+    body += renderCellGrid(st.gather, {
+      rowLabels: conjLabels, axisLabel: 'k', padCls: 'pad',
+      markNeg: (ri, k) => ri === 5 && k === 0,
+      notes: conjLabels.map((_, i) => i === 5 ? '<span style="color:var(--yellow)">★ k=0 是 negated 槽</span>' : ''),
+    });
+  } else if (fwStep === 1) {
+    /* xor: show [C, K] post-xor, animate the flip on conj 5 */
+    body += renderCellGrid(st.xor, {
+      rowLabels: conjLabels, axisLabel: 'k', padCls: 'pad',
+      markNeg: (ri, k) => ri === 5 && k === 0,
+      flashCells: (ri, k) => ri === 5 && k === 0,
+      notes: conjLabels.map((_, i) => {
+        if (i !== 5) return '';
+        const before = st.gather[5][0], after = st.xor[5][0];
+        return `<span style="color:var(--yellow);font-weight:600">★ ${before?'T':'F'} XOR T = ${after?'T':'F'}</span>`;
+      }),
+    });
+  } else if (fwStep === 2) {
+    /* or-pad: show [C, K] padding -> T */
+    body += renderCellGrid(st.orPad, {
+      rowLabels: conjLabels, axisLabel: 'k',
+      markNeg: (ri, k) => ri === 5 && k === 0,
+      notes: conjLabels.map((_, i) => '<span style="color:var(--text-2)">padding→T</span>'),
+    });
+  } else if (fwStep === 3) {
+    /* AND -> conj_ok */
+    body += renderCellGrid(st.orPad, {
+      rowLabels: conjLabels, axisLabel: 'k',
+      markNeg: (ri, k) => ri === 5 && k === 0,
+    });
+    body += '<div style="margin-top:14px;font-size:13px;color:var(--text-1);font-weight:600">→ all(dim=2) 沿 K 维 AND 规约：</div>';
+    body += renderResultColumn(st.conjOk, conjLabels);
+  } else if (fwStep === 4) {
+    /* gather conj_ok by item_conj_ids -> [N, J] */
+    body += '<div style="font-size:12px;color:var(--text-2);margin-bottom:6px">conj_ok = ' + st.conjOk.map(v => v ? 'T' : 'F').join(', ') + '</div>';
+    /* show first few J columns */
+    const rows = st.itemConjOk.map(r => r.slice(0, 4));
+    body += renderCellGrid(rows, {
+      rowLabels: itemLabels, axisLabel: 'j',
+      notes: ITEMS.map(it => it.conjs.length > 1 ? '← <b style="color:var(--accent)">2 个 conj (OR)</b>' : ''),
+    });
+  } else if (fwStep === 5) {
+    /* AND valid + any */
+    const rows = st.itemConjOk.map(r => r.slice(0, 4));
+    body += renderCellGrid(rows, { rowLabels: itemLabels, axisLabel: 'j' });
+    body += '<div style="margin-top:14px;font-size:13px;color:var(--text-1);font-weight:600">→ &amp; valid (padding→F) → any(dim=2) 沿 J 维 OR 规约：</div>';
+    body += renderResultColumn(st.itemOk, itemLabels);
+  }
+
+  document.getElementById('fw-panel').innerHTML =
+    `<div style="font-size:15px;font-weight:600;color:var(--text-0);margin-bottom:6px">${s.title}</div>` +
+    `<div class="fw-formula">${s.formula}</div>` +
+    `<div class="fw-explain">${s.explain}</div>` +
+    body;
+
+  document.getElementById('fw-cap').innerHTML =
+    `${s.title}<span class="nar">${s.nar}</span>`;
+
+  /* dots */
+  const dots = document.getElementById('fw-dots');
+  dots.innerHTML = FW_STEPS.map((_, i) =>
+    `<div class="fw-dot ${i === fwStep ? 'on' : (i < fwStep ? 'done' : '')}" data-i="${i}"></div>`
+  ).join('');
+  dots.querySelectorAll('.fw-dot').forEach(d => {
+    d.onclick = () => { fwStep = +d.dataset.i; renderFwPanel(); };
+  });
+
+  document.getElementById('fw-prev').disabled = fwStep === 0;
+  document.getElementById('fw-next').disabled = fwStep === FW_STEPS.length - 1;
+}
+
+document.getElementById('fw-prev').onclick = () => { if (fwStep > 0) { fwStep--; renderFwPanel(); } };
+document.getElementById('fw-next').onclick = () => { if (fwStep < FW_STEPS.length - 1) { fwStep++; renderFwPanel(); } };
+
+/* ═══════════ 最终结果卡片 ═══════════ */
+function renderResultCards() {
+  const st = computeFwState();
+  const root = document.getElementById('result-cards');
+  let html = '';
+  ITEMS.forEach((it, i) => {
+    const ok = st.itemOk[i];
+    html += `<div class="rcard ${ok ? 'match' : 'miss'}">
+      <div class="rid">item ${it.id}</div>
+      <div class="rrule">${it.rule}</div>
+      <div class="rstatus">${ok ? '✓ 匹配 (score=0.0)' : '✗ 不匹配 (-inf)'}</div>
+    </div>`;
+  });
+  root.innerHTML = html;
+}
+
+/* ═══════════ 全局 refresh ═══════════ */
+function refresh() {
+  renderUserEd();
+  renderPsat();
+  renderFwPanel();
+  renderResultCards();
+}
+
+refresh();
+
+/* ═══════════ TOC active tracking ═══════════ */
+const sections = document.querySelectorAll('section[id]');
+const tocLinks = document.querySelectorAll('.sidebar a');
+const tocMap = {};
+tocLinks.forEach(a => { const h = a.getAttribute('href'); if (h && h.startsWith('#')) tocMap[h.slice(1)] = a; });
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting && tocMap[e.target.id]) {
+      tocLinks.forEach(a => a.classList.remove('active'));
+      tocMap[e.target.id].classList.add('active');
+    }
+  });
+}, { rootMargin: '-64px 0px -60% 0px', threshold: 0 });
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

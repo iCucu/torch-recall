@@ -279,7 +279,7 @@ td.mono{font-family:var(--mono);font-size:12px}
       <div class="mc-desc">根据用户属性对 item 定向规则做精确匹配。支持 <code>==</code> <code>!=</code> <code>></code> <code>contains</code> 等运算符，<code>AND</code> / <code>OR</code> / <code>NOT</code> 嵌套。规则编译为 DNF 矩阵，纯 tensor 操作。</div>
       <div class="mc-sig">返回 0.0（匹配）/ -inf（不匹配）<br>忽略 query 参数</div>
       <div class="mc-links">
-        <a href="targeting/walkthrough.md">端到端示例 →</a>
+        <a class="star" href="targeting/walkthrough.html">交互式示例 ★</a>
         <a href="targeting/design.md">设计文档 →</a>
       </div>
     </div>
@@ -422,9 +422,9 @@ top_scores, top_indices = pipeline(pred, query)</div>
       <span class="dl-icon">🎯</span>
       <div><div class="dl-text">定向召回设计</div><div class="dl-sub">DNF 矩阵化、优化策略</div></div>
     </a>
-    <a class="dl" href="targeting/walkthrough.md">
-      <span class="dl-icon">📖</span>
-      <div><div class="dl-text">定向召回 · 端到端示例</div><div class="dl-sub">从构建到查询的完整演示</div></div>
+    <a class="dl" href="targeting/walkthrough.html">
+      <span class="dl-icon">⭐</span>
+      <div><div class="dl-text">定向召回 · 交互式示例</div><div class="dl-sub">DNF 转换、Conj 张量、forward 6 步逐步可视化</div></div>
     </a>
     <a class="dl" href="targeting/benchmark.md">
       <span class="dl-icon">📊</span>
