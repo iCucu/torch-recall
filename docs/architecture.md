@@ -19,10 +19,15 @@ torch-recall 是基于 PyTorch 的召回框架。每种召回方法实现为统�
 │    Pipeline     topk 输出    │    │    KNNBuilder               │
 │    exporter     .pt2 导出    │    │    encode_query             │
 │                              │    ├─────────────────────────────┤
-│  inference/           │    │  generative/                │
+│  inference/           │    │  autoregressive/            │
 │    通用 C++ 推理引擎          │    │    GenerativeRecall          │
 │                              │    │    GenerativeBuilder         │
 │                              │    │    Trie (Dense/CSR hybrid)   │
+│                              │    ├─────────────────────────────┤
+│                              │    │  diffusion/                 │
+│                              │    │    DiffusionRecall           │
+│                              │    │    DiffusionBuilder          │
+│                              │    │    SidPathFilter             │
 │                              │    ├─────────────────────────────┤
 │                              │    │  ann/ (planned)             │
 │                              │    │    ANNRecall                │
@@ -46,7 +51,8 @@ class RecallOp(nn.Module):
 |------|---------|-----------|
 | **TargetingRecall** | `0.0` (匹配) / `-inf` (不匹配) | `pred_satisfied` |
 | **KNNRecall** | 相似度分数 (越高越相关) | `query` 的对应切片 |
-| **GenerativeRecall** | 累积 log-probability (beam search) | `pred_satisfied` + `query` 切片 |
+| **GenerativeRecall** | 累积 log-probability (Trie 约束 beam search) | `pred_satisfied` + `query` 切片 |
+| **DiffusionRecall** | 累积 log-probability (SidPathFilter 约束 beam search) | `pred_satisfied` + `query` 切片 |
 | **AndModule** | `sum(children)` — `-inf` 传染，实现交集 | 透传给子节点 |
 | **OrModule** | `max(children)` — 任一匹配即包含 | 透传给子节点 |
 
@@ -93,9 +99,13 @@ class RecallOp(nn.Module):
 
 ### 3.3 Generative — 生成式召回
 
-**场景**: 复杂用户-item 交互建模。通过自回归 decoder 在语义 ID 空间中"生成"item。
+**场景**: 复杂用户-item 交互建模。通过 decoder 在语义 ID 空间中"生成"item。
 
-**核心**: 每个 item 编码为长度 5 的 sid_path（语义 ID 路径）。离线构建 Dense/CSR 混合 Trie，在线通过 Trie 约束的 Beam Search 选出 top-K 路径，再反解为 item。内置 Targeting mask 的向上传播，确保 beam 只走有效路径。
+本框架支持两种生成式召回范式：
+
+#### 3.3.1 Autoregressive (AR) — Trie 约束
+
+**核心**: 每个 item 编码为长度 L 的 sid_path（语义 ID 路径）。离线构建 Dense/CSR 混合 Trie，在线通过 Trie 约束的 Beam Search 选出 top-K 路径，再反解为 item。内置 Targeting mask 的向上传播，确保 beam 只走有效路径。
 
 **输入/输出**:
 - 输入: `pred_satisfied [B, P] bool`（targeting 过滤）+ `query [B, D] float` 中的用户表征切片
@@ -104,7 +114,30 @@ class RecallOp(nn.Module):
 **关键组件**:
 - `Trie`：Dense/CSR 混合前缀树，全局 State ID，支持在线 propagation
 - `GenerativeBuilder`：向量化 NumPy 构建（参考 STATIC）
-- 外部 `Decoder`：自回归 `nn.Module`，本项目提供 `MockDecoder` 用于测试
+- 外部 `Decoder`：因果自回归 `nn.Module`，输出 `[B*beam, V]`
+
+#### 3.3.2 Diffusion — SidPathFilter 路径位图约束
+
+**核心**: 不需要 Trie。直接维护一个 `beam_mask [B, beam, N]` 布尔张量标记每个 beam 的候选 item 集合。每步 commit 一个 token 后，`beam_mask` 被收窄至仅包含与 committed token 一致的 item。解码顺序由 decoder 置信度自适应决定。
+
+**输入/输出**:
+- 输入: `pred_satisfied [B, P] bool`（targeting 过滤）+ `query [B, D] float` 中的用户表征切片
+- 输出: `[B, N] float` — 累积 log-probability 分数
+
+**关键组件**:
+- `SidPathFilter`：路径位图核心 — `init_beam_mask` / `collect_valid_tokens` / `filter_beam_paths`
+- `DiffusionBuilder`：直接从 `sid_path` 构造 `path_vectors [N, L]`，无需 Trie
+- 外部 `Decoder`：双向 `nn.Module`，并行输出 `[B*beam, L, V]`
+
+**AR vs Diffusion 适用对比**:
+
+| 维度 | AR (Trie) | Diffusion (SidPathFilter) |
+|------|-----------|--------------------------|
+| 离线构建复杂度 | 高（排序 + CSR + Dense） | 低（直接堆叠 path_vectors） |
+| 内存（约束数据结构） | O(S)（S = Trie 节点数，S ≪ N） | O(N × beam) |
+| Decoder 类型 | 因果注意力（逐步） | 双向注意力（并行） |
+| 解码顺序 | 固定 depth 0 → L-1 | 自适应（置信度优先） |
+| 适用规模 | 大 N（百万级以上） | 中等 N（百万级以内） |
 
 详见 [generative/README.md](generative/README.md)。
 
@@ -139,6 +172,9 @@ Or
     ├── Targeting(schema)
     └── KNN("cosine")
 ```
+
+> 注: `DiffusionRecall` 目前作为独立算子使用（通过 `DiffusionBuilder` 构建），
+> 尚未接入 Pipeline spec 声明式组合。后续可添加 `Diffusion(schema, decoder, ...)` spec 节点。
 
 ### 编译为 nn.Module 树
 
@@ -216,7 +252,7 @@ def export_recall_model(model, output_path):
     torch._inductor.aoti_compile_and_package(exported, package_path=output_path)
 ```
 
-通用导出函数，接受任何实现了 `example_inputs()` 的 `nn.Module`。单独的 `TargetingRecall`、`KNNRecall`、`GenerativeRecall`、组合后的 `RecallPipeline` 都可以导出。
+通用导出函数，接受任何实现了 `example_inputs()` 的 `nn.Module`。单独的 `TargetingRecall`、`KNNRecall`、`GenerativeRecall`、`DiffusionRecall`、组合后的 `RecallPipeline` 都可以导出。
 
 ### 5.4 C++ 推理引擎
 
@@ -261,11 +297,16 @@ torch-recall/
 │       │   │   ├── recall.py            KNNRecall(RecallOp)
 │       │   │   ├── builder.py           KNNBuilder
 │       │   │   └── encoder.py           encode_query
-│       │   └── generative/              生成式召回
-│       │       ├── recall.py            GenerativeRecall(RecallOp)
-│       │       ├── builder.py           GenerativeBuilder
-│       │       ├── trie.py              Trie (Dense/CSR hybrid)
-│       │       └── decoder.py           MockDecoder
+│       │   ├── autoregressive/          生成式召回 — AR (Trie + Beam Search)
+│       │   │   ├── recall.py            GenerativeRecall(RecallOp)
+│       │   │   ├── trie.py              Trie (Dense/CSR hybrid)
+│       │   │   ├── builder.py           GenerativeBuilder
+│       │   │   └── decoder.py           MockDecoder
+│       │   └── diffusion/              生成式召回 — Diffusion (SidPathFilter)
+│       │       ├── recall.py            DiffusionRecall(RecallOp)
+│       │       ├── path_filter.py       SidPathFilter: 路径位图约束
+│       │       ├── builder.py           DiffusionBuilder
+│       │       └── model.py             MockDiffusionDecoder
 │       ├── scheduler/
 │       │   ├── spec.py                  Targeting, KNN, Generative, And, Or spec
 │       │   ├── pipeline.py              AndModule, OrModule, RecallPipeline
@@ -279,11 +320,13 @@ torch-recall/
 └── docs/
     ├── architecture.md                  ← 本文档
     ├── targeting/                       定向召回文档
-    └── generative/                      生成式召回文档
+    └── generative/                      生成式召回文档 (AR + Diffusion)
 ```
 
 新增召回方法时:
 1. 在 `recall_method/` 下新建目录，实现 `RecallOp` 子类 + `Builder` + `Encoder`
-2. 在 `scheduler/spec.py` 中添加对应的 spec 节点
+2. （可选）在 `scheduler/spec.py` 中添加对应的 spec 节点以支持声明式组合
 3. 在 `pipeline_builder.py` 中添加该 spec 的编译逻辑
 4. 共享组件（Schema, exporter, C++ engine）无需修改
+
+> `DiffusionRecall` 即为按此模式新增的第二种生成式召回算子。

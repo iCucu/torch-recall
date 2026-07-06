@@ -17,10 +17,16 @@
 │    Pipeline     topk 输出    │    │    KNNBuilder               │
 │    exporter     .pt2 导出    │    │    encode_query             │
 │                              │    ├─────────────────────────────┤
-│  inference/                  │    │  generative/                │
+│  inference/                  │    │  autoregressive/            │
 │    通用 C++ 推理引擎          │    │    GenerativeRecall         │
 │                              │    │    GenerativeBuilder        │
 │                              │    │    Trie (Dense/CSR 混合)     │
+│                              │    │    Decoder (外部传入)        │
+│                              │    ├─────────────────────────────┤
+│                              │    │  diffusion/                 │
+│                              │    │    DiffusionRecall          │
+│                              │    │    DiffusionBuilder         │
+│                              │    │    SidPathFilter (路径位图)  │
 │                              │    │    Decoder (外部传入)        │
 │                              │    ├─────────────────────────────┤
 │                              │    │  ann/ (planned)             │
@@ -40,7 +46,8 @@ class RecallOp(nn.Module):
 
 - **Targeting**: 返回 `0.0`（匹配）/ `-inf`（不匹配），忽略 `query`
 - **KNN**: 返回相似度分数，忽略 `pred_satisfied`
-- **Generative**: 通过 Trie 约束 Beam Search 生成 item 的语义 ID 路径，返回累积 log-probability 分数
+- **Generative (AR)**: 通过 Trie 约束 Beam Search 生成 item 的语义 ID 路径，返回累积 log-probability 分数
+- **Generative (Diffusion)**: 通过 SidPathFilter 路径位图约束 + 自适应顺序 Beam Search，返回累积 log-probability 分数
 - **And**: `sum(children)` — `-inf` 使不匹配项自然被排除
 - **Or**: `max(children)` — 任一子节点匹配即包含
 
@@ -48,10 +55,10 @@ class RecallOp(nn.Module):
 
 | 组件 | 职责 |
 |------|------|
-| **Builder** | 离线构建索引，生成 `RecallOp` + meta JSON。Generative 额外构建 Trie (Dense/CSR) 和 leaf→item 映射 |
+| **Builder** | 离线构建索引，生成 `RecallOp` + meta JSON。AR Generative 额外构建 Trie (Dense/CSR) 和 leaf→item 映射；Diffusion 直接构造 path_vectors |
 | **RecallOp** (`nn.Module`) | `forward()` 纯 tensor 操作，可编译导出 |
 | **Encoder** | 将业务输入编码为 `forward()` 所需的 tensor |
-| **Decoder** *(仅 Generative)* | 外部传入的 `nn.Module`，根据用户表征和已选前缀输出下一步 logits |
+| **Decoder** *(仅 Generative)* | 外部传入的 `nn.Module`；AR 版逐步输出 `[B*beam, V]`，Diffusion 版并行输出 `[B*beam, L, V]` |
 
 ## 环境准备
 
@@ -122,6 +129,12 @@ spec = Or(
     Generative(schema, decoder, beam_width=10),
     KNN(metric="cosine"),
 )
+
+# 扩散式召回 (SidPathFilter 路径位图约束)
+from torch_recall import DiffusionBuilder, MockDiffusionDecoder
+diffusion_decoder = MockDiffusionDecoder(user_dim=32, path_length=5)
+diffusion_builder = DiffusionBuilder(schema, diffusion_decoder, beam_width=10, path_length=5)
+model, meta = diffusion_builder.build(items)
 ```
 
 ## 单独使用 — Targeting
@@ -165,14 +178,14 @@ scores, indices = model.query([0.9, 0.1, 0.0], meta)
 # → indices: [0, 2]  (最相似的两个)
 ```
 
-## 单独使用 — Generative
+## 单独使用 — Generative (AR)
 
 生成式召回将每个 item 编码为一条语义 ID 路径（sid_path），组织成 Trie 树，通过自回归 decoder 逐层 beam search 召回 item。内置 targeting 过滤，在 beam search 前自底向上剪掉无效子树。
 
 ```python
 from torch_recall.schema import Schema, Item
-from torch_recall.recall_method.generative.builder import GenerativeBuilder
-from torch_recall.recall_method.generative.decoder import MockDecoder
+from torch_recall.recall_method.autoregressive.builder import GenerativeBuilder
+from torch_recall.recall_method.autoregressive.decoder import MockDecoder
 from torch_recall.recall_method.targeting.encoder import encode_user
 import torch
 
@@ -197,6 +210,39 @@ with torch.no_grad():
 ```
 
 **核心流程**：Targeting Mask → Validity Propagation（自底向上剪枝）→ Beam Search（Dense + CSR 混合）→ Resolve Leaves。详见 [docs/generative/README.md](docs/generative/README.md)。
+
+## 单独使用 — Generative (Diffusion)
+
+扩散式召回使用路径位图（SidPathFilter）替代 Trie，通过自适应顺序的并行 Beam Search 召回 item。每步选择置信度最高的位置 commit，`beam_mask` 逐步收窄至精确匹配。
+
+```python
+from torch_recall.schema import Schema, Item
+from torch_recall.recall_method.diffusion.builder import DiffusionBuilder
+from torch_recall.recall_method.diffusion.model import MockDiffusionDecoder
+from torch_recall.recall_method.targeting.encoder import encode_user
+import torch
+
+schema = Schema(discrete_fields=["city"], numeric_fields=["age"])
+items = [
+    Item(id="北京烤鸭", targeting_rule='city == "北京"', sid_path=[0, 1, 2, 3, 4]),
+    Item(id="全聚德",    targeting_rule='city == "北京"', sid_path=[0, 1, 2, 3, 4]),
+    Item(id="上海小笼包", targeting_rule='city == "上海"', sid_path=[0, 1, 5, 6, 7]),
+    Item(id="连锁火锅",  targeting_rule="age > 18",      sid_path=[0, 2, 8, 9, 10]),
+    Item(id="学生套餐",  targeting_rule='city == "北京"', sid_path=[0, 2, 8, 9, 11]),
+]
+
+decoder = MockDiffusionDecoder(user_dim=32, path_length=5, vocab_size=2048)
+builder = DiffusionBuilder(schema, decoder, beam_width=3, path_length=5)
+model, meta = builder.build(items)
+
+# 在线查询
+pred = encode_user({"city": "北京", "age": 25}, meta["targeting"]).unsqueeze(0)
+query = torch.randn(1, 32)
+with torch.no_grad():
+    scores = model(pred, query)  # [1, 5] — 每个 item 的分数
+```
+
+**核心流程**：Targeting Mask → Init Beam Mask → 自适应顺序 L 步解码（collect_valid_tokens + beam expand + filter_beam_paths）→ beam_mask max resolve。详见 [docs/generative/README.md](docs/generative/README.md)。
 
 ## 规则语法
 
@@ -249,13 +295,18 @@ torch-recall/
 │       │   │   ├── recall.py            KNNRecall(RecallOp)
 │       │   │   ├── builder.py           KNNBuilder
 │       │   │   └── encoder.py           encode_query
-│       │   └── generative/              生成式召回 (Trie + Beam Search)
-│       │       ├── recall.py            GenerativeRecall(RecallOp)
-│       │       ├── trie.py              Trie: Dense/CSR 混合前缀树
-│       │       ├── builder.py           GenerativeBuilder
-│       │       └── decoder.py           MockDecoder (测试用)
+│       │   ├── autoregressive/          生成式召回 — AR (Trie + Beam Search)
+│       │   │   ├── recall.py            GenerativeRecall(RecallOp)
+│       │   │   ├── trie.py              Trie: Dense/CSR 混合前缀树
+│       │   │   ├── builder.py           GenerativeBuilder
+│       │   │   └── decoder.py           MockDecoder (测试用)
+│       │   └── diffusion/              生成式召回 — Diffusion (SidPathFilter)
+│       │       ├── recall.py            DiffusionRecall(RecallOp)
+│       │       ├── path_filter.py       SidPathFilter: 路径位图约束
+│       │       ├── builder.py           DiffusionBuilder
+│       │       └── model.py             MockDiffusionDecoder (测试用)
 │       ├── scheduler/
-│       │   ├── spec.py                  Targeting, KNN, And, Or 声明式 spec
+│       │   ├── spec.py                  Targeting, KNN, Generative, And, Or 声明式 spec
 │       │   ├── pipeline.py              AndModule, OrModule, RecallPipeline
 │       │   ├── pipeline_builder.py      PipelineBuilder: spec → nn.Module
 │       │   ├── encoder.py               encode_pipeline_inputs
@@ -269,8 +320,8 @@ torch-recall/
     ├── architecture.md                  框架架构
     ├── targeting/                       定向召回文档
     └── generative/                      生成式召回文档
-        ├── README.md                    设计概览
-        ├── walkthrough.md               端到端示例 (源文档)
+        ├── README.md                    设计概览 (AR + Diffusion)
+        ├── walkthrough.md               端到端示例 (AR §1–3 + Diffusion §4)
         └── walkthrough.html             端到端示例 (交互式)
 ```
 
@@ -283,6 +334,6 @@ torch-recall/
 | [docs/targeting/implementation.md](docs/targeting/implementation.md) | 定向召回模块实现参考 |
 | [docs/targeting/walkthrough.md](docs/targeting/walkthrough.md) | 定向召回端到端示例详解 |
 | [docs/targeting/benchmark.md](docs/targeting/benchmark.md) | 定向召回性能测试结果 |
-| [docs/generative/README.md](docs/generative/README.md) | 生成式召回设计与架构 |
-| [docs/generative/walkthrough.md](docs/generative/walkthrough.md) | 生成式召回端到端示例详解 |
+| [docs/generative/README.md](docs/generative/README.md) | 生成式召回设计与架构 (AR + Diffusion) |
+| [docs/generative/walkthrough.md](docs/generative/walkthrough.md) | 生成式召回端到端示例 (AR §1–3 + Diffusion §4) |
 | [docs/generative/walkthrough.html](docs/generative/walkthrough.html) | 生成式召回端到端交互式示例 |
