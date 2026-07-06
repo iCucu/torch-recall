@@ -16,7 +16,7 @@ import torch
 
 from torch_recall.schema import Item, Schema
 from torch_recall.recall_method.targeting.builder import TargetingBuilder
-from torch_recall.recall_method.generative.trie import Trie
+from torch_recall.recall_method.autoregressive.trie import Trie
 
 
 class GenerativeBuilder:
@@ -41,7 +41,7 @@ class GenerativeBuilder:
     # -- public API --------------------------------------------------------
 
     def build(self, items: list[Item]) -> tuple[torch.nn.Module, dict]:
-        from torch_recall.recall_method.generative.recall import GenerativeRecall
+        from torch_recall.recall_method.autoregressive.recall import GenerativeRecall
 
         self._validate_items(items)
         N = len(items)

@@ -4,10 +4,10 @@ import pytest
 import torch
 
 from torch_recall.schema import Item, Schema
-from torch_recall.recall_method.generative.builder import GenerativeBuilder
-from torch_recall.recall_method.generative.decoder import MockDecoder
-from torch_recall.recall_method.generative.trie import Trie
-from torch_recall.recall_method.generative.recall import GenerativeRecall
+from torch_recall.recall_method.autoregressive.builder import GenerativeBuilder
+from torch_recall.recall_method.autoregressive.decoder import MockDecoder
+from torch_recall.recall_method.autoregressive.trie import Trie
+from torch_recall.recall_method.autoregressive.recall import GenerativeRecall
 from torch_recall.recall_method.targeting.encoder import encode_user
 from torch_recall.scheduler.spec import Generative, KNN, Or
 from torch_recall.scheduler.pipeline_builder import PipelineBuilder

@@ -1,8 +1,12 @@
 # 生成式召回 — 端到端示例
 
 > 用 7 个 item 完整走一遍离线构建和在线推理，展示每个向量的具体内容。
+>
+> 本文档包含两种模式：
+> - **§1–§3: 自回归 (AR) 模式** — Trie 约束 Beam Search（`autoregressive/`）
+> - **§4: 扩散 (Diffusion) 模式** — SidPathFilter 路径位图约束（`diffusion/`）
 
-本文档是 [README.md](README.md) 的配套示例。参数：V=2048, L=5, d_dense=2, beam_width=3。
+本文档是 [README.md](README.md) 的配套示例。AR 部分参数：V=2048, L=5, d_dense=2, beam_width=3。
 
 ---
 
@@ -37,6 +41,8 @@ items + sid_paths                     用户特征 + query
 
 ### 代码文件一览
 
+**自回归模式** (`autoregressive/`)
+
 | 文件 | 职责 | 本文对应章节 |
 |------|------|------------|
 | `builder.py` → `GenerativeBuilder.build()` | 离线构建入口：排序、diff-scan、State ID 分配、CSR/Dense/Leaf 表构建 | §2 |
@@ -49,7 +55,18 @@ items + sid_paths                     用户特征 + query
 | `recall.py` → `GenerativeRecall._step_dense()` | Beam Search 的 Dense 步（前 d_dense 层） | §3.4 Step 1 |
 | `recall.py` → `GenerativeRecall._step_csr()` | Beam Search 的 CSR 步（d_dense 层之后） | §3.4 Step 2~4 |
 
-所有代码位于 `torch_recall/recall_method/generative/` 目录下。
+**扩散模式** (`diffusion/`)
+
+| 文件 | 职责 | 本文对应章节 |
+|------|------|------------|
+| `builder.py` → `DiffusionBuilder.build()` | 离线构建入口：堆叠 path_vectors、构建 SidPathFilter | §4.2 |
+| `path_filter.py` → `SidPathFilter.init_beam_mask()` | 初始化 per-beam 路径位图 | §4.4 Phase 2 |
+| `path_filter.py` → `SidPathFilter.collect_valid_tokens()` | 统计每个位置的合法 token 集合 | §4.4 每步约束 |
+| `path_filter.py` → `SidPathFilter.filter_beam_paths()` | commit 后收窄 beam_mask | §4.4 每步 filter |
+| `recall.py` → `DiffusionRecall.forward()` | 在线推理入口：自适应顺序解码 + resolve | §4.4 |
+| `model.py` → `MockDiffusionDecoder` | 测试用双向 decoder：输出 [B_beam, L, V] | §4.4 |
+
+所有代码位于 `torch_recall/recall_method/autoregressive/` 和 `torch_recall/recall_method/diffusion/` 目录下。
 
 ---
 
@@ -1050,3 +1067,429 @@ Pipeline 做 `topk(K)` 返回排序结果：
 ```
 
 被 targeting 过滤的 item c, f, g 自始至终不会出现在结果中——它们在 Phase 2 就被从 Trie 中剪掉了，beam search 根本不会探索到它们。
+
+---
+
+## 4. 扩散模式 — SidPathFilter 端到端走查
+
+> 同样 7 个 item、同一个用户，换用 `DiffusionRecall` + `SidPathFilter` 完成召回。
+>
+> 参数：V=2048, L=5, beam_width=3。无 Trie、无 CSR——只需一个路径矩阵 `path_vectors [7, 5]`。
+
+### 4.1 核心区别
+
+| 维度 | AR (§1–§3) | Diffusion (本节) |
+|------|-----------|----------------|
+| 约束数据结构 | Trie (`node_valid [B,S]`) | 路径位图 (`beam_mask [B, beam, N]`) |
+| 解码顺序 | 固定 depth 0 → L-1 | 自适应（每步选置信度最高的位置） |
+| Decoder 输出 | `[B*beam, V]`（单位置） | `[B*beam, L, V]`（所有位置并行） |
+| Resolve | leaf_state → item 映射 | `beam_mask` 直接是 item 集 |
+
+### 4.2 离线构建
+
+构建极其简单——只需把 7 条 sid_path 直接堆叠为 `path_vectors`：
+
+```
+path_vectors [7, 5]:
+  row 0 (a): [0, 1, 2,  3,  4]
+  row 1 (b): [0, 1, 2,  3,  4]
+  row 2 (c): [0, 1, 5,  6,  7]
+  row 3 (d): [0, 2, 8,  9,  10]
+  row 4 (e): [0, 2, 8,  9,  11]
+  row 5 (f): [1, 3, 12, 13, 14]
+  row 6 (g): [1, 4, 17, 18, 19]
+```
+
+> **对应代码** (`diffusion/builder.py` → `DiffusionBuilder.build`):
+>
+> ```python
+> path_vectors = torch.tensor([item.sid_path for item in items], dtype=torch.long)
+> path_filter = SidPathFilter(path_vectors, self.sid_vocab_size)
+> ```
+>
+> 没有排序、没有 diff-scan、没有 State ID 分配——直接注册为 buffer，结束。
+> 这是 SidPathFilter 相比 Trie 最大的简化之处。
+
+### 4.3 Tensor 速查
+
+| Tensor | 形状 | 含义 |
+|--------|------|------|
+| `path_vectors` | [N, L] = [7, 5] | 每个 item 的 SID 路径（离线静态 buffer） |
+| `beam_mask` | [B, beam, N] = [1, 3, 7] | 每个 beam 的活跃路径集合（迭代中收窄） |
+| `paths` | [B, beam, L] = [1, 3, 5] | 部分填充的 SID 序列，MASK_ID = -1 |
+| `beam_scores` | [B, beam] = [1, 3] | 累积 log-probability |
+
+### 4.4 在线推理
+
+场景与 §3 相同：用户 `{city: "北京", age: 25}`。
+
+#### Phase 1: Targeting Mask
+
+```
+targeting_scores = [0.0, 0.0, -inf, 0.0, 0.0, -inf, -inf]
+                    a✓   b✓   c✗    d✓   e✓   f✗    g✗
+
+item_mask = [T, T, F, T, T, F, F]
+```
+
+> **对应代码** (`diffusion/recall.py` → `DiffusionRecall.forward`):
+>
+> ```python
+> targeting_scores = self.targeting(pred_satisfied, query)
+> item_mask = targeting_scores > float("-inf")   # [B, N]
+> ```
+
+#### Phase 2: Init Beam Mask
+
+将 `item_mask` 广播到每个 beam：
+
+```
+beam_mask [1, 3, 7]:
+  beam 0: [T, T, F, T, T, F, F]   ← 复制自 item_mask
+  beam 1: [T, T, F, T, T, F, F]
+  beam 2: [T, T, F, T, T, F, F]
+
+paths [1, 3, 5] = [[-1,-1,-1,-1,-1], [-1,-1,-1,-1,-1], [-1,-1,-1,-1,-1]]
+beam_scores [1, 3] = [0.0, 0.0, 0.0]
+```
+
+> **对应代码** (`diffusion/path_filter.py` → `SidPathFilter.init_beam_mask`):
+>
+> ```python
+> beam_mask = item_mask.unsqueeze(1).expand(-1, beam_width, -1).clone()
+> ```
+>
+> 与 AR 的 Phase 2 `propagate_validity` 对比：AR 需要从叶子到根逐层传播
+> 有效性（O(S) 操作），这里只是一个 expand + clone（O(N) 操作）。
+
+#### Phase 3: 自适应顺序解码（5 步）
+
+每步：Decoder 并行输出所有位置 logits → mask 无效 token → 选最优位置 → beam expand → filter。
+
+---
+
+##### Step 1: Decoder 输出
+
+```
+decoder forward(user_repr [3, D], partial_paths [3, 5]):
+  → logits [3, 5, V]   (3 beams × 5 positions × V tokens)
+
+log_softmax → lp [1, 3, 5, V]
+```
+
+##### Step 1: collect_valid_tokens
+
+对 5 个未填位置分别调用 `collect_valid_tokens`：
+
+```
+position 0: path_vectors[:, 0] = [0, 0, 0, 0, 0, 1, 1]
+  活跃 item (beam 0): a,b,d,e → tokens {0}    (item a/b/d/e 位0=0)
+  → valid_tokens[0] = {0}
+
+position 1: path_vectors[:, 1] = [1, 1, 1, 2, 2, 3, 4]
+  活跃 item: a,b,d,e → tokens {1, 2}
+  → valid_tokens[1] = {1, 2}
+
+position 2: path_vectors[:, 2] = [2, 2, 5, 8, 8, 12, 17]
+  活跃 item: a,b,d,e → tokens {2, 8}
+  → valid_tokens[2] = {2, 8}
+
+position 3: path_vectors[:, 3] = [3, 3, 6, 9, 9, 13, 18]
+  活跃 item: a,b,d,e → tokens {3, 9}
+  → valid_tokens[3] = {3, 9}
+
+position 4: path_vectors[:, 4] = [4, 4, 7, 10, 11, 14, 19]
+  活跃 item: a,b,d,e → tokens {4, 10, 11}
+  → valid_tokens[4] = {4, 10, 11}
+```
+
+> **对应代码** (`diffusion/path_filter.py` → `SidPathFilter.collect_valid_tokens`):
+>
+> ```python
+> tokens_at_pos = self.path_vectors[:, position]           # [N]
+> idx = tokens_at_pos.view(1, 1, N).expand(B, bw, N)
+> valid = torch.zeros(B, bw, V, dtype=torch.int32, device=device)
+> valid.scatter_add_(2, idx.long(), beam_mask.int())       # 只有活跃路径贡献 ≥1
+> return valid.bool()
+> ```
+>
+> `scatter_add_` 将每条活跃路径在 position 处的 token 值"投票"到 `valid` 张量中，
+> 只要某个 token 收到 ≥1 票（即至少有一条活跃路径在该位置使用该 token），它就合法。
+
+##### Step 1: 选择最优位置
+
+Mask 后每个位置的 logit 最大值（置信度）：
+
+```
+假设 decoder 给出如下 max-logprob（mask 后）:
+  position 0: max_lp = -0.3   (只有 1 个 valid token: 0)
+  position 1: max_lp = -0.5   (2 个 valid token: 1, 2)
+  position 2: max_lp = -0.4   (2 个 valid token: 2, 8)
+  position 3: max_lp = -0.6
+  position 4: max_lp = -0.8
+
+跨 beam 取均值后: mean_conf = [-0.3, -0.5, -0.4, -0.6, -0.8]
+argmax → best_pos = 0   (位置 0 置信度最高)
+```
+
+> **对应代码** (`diffusion/recall.py`):
+>
+> ```python
+> conf = lp.max(dim=-1).values                   # [B, beam, L]
+> conf_masked = conf.masked_fill(~is_unfilled, float("-inf"))
+> mean_conf = conf_masked.mean(dim=1)            # [B, L]
+> best_pos = mean_conf.argmax(dim=-1)            # [B]
+> ```
+
+##### Step 1: Beam Expand @ position 0
+
+```
+position=0, valid token = {0}
+
+cand[beam × V] = beam_scores + lp[:, :, pos=0, :]
+  3 beams × 1 valid token = 3 个候选（全部是 token=0）
+
+topk(3):
+  beam 0: token=0, score=-0.3
+  beam 1: token=0, score=-0.3   (所有 beam 分数相同，因为初始 beam 一样)
+  beam 2: token=0, score=-0.3
+```
+
+##### Step 1: filter_beam_paths @ position 0
+
+```
+committed token = 0 for all beams
+
+path_vectors[:, 0] = [0, 0, 0, 0, 0, 1, 1]
+consistent = (path_vectors[:, 0] == 0) → [T, T, T, T, T, F, F]
+
+beam_mask &= consistent:
+  beam 0: [T,T,F,T,T,F,F] & [T,T,T,T,T,F,F] = [T, T, F, T, T, F, F]  (不变)
+  beam 1: same
+  beam 2: same
+
+→ item f, g 本来就被 targeting 排除了，filter 无额外变化
+```
+
+> **对应代码** (`diffusion/path_filter.py` → `SidPathFilter.filter_beam_paths`):
+>
+> ```python
+> path_tok = self.path_vectors[:, position]
+> consistent = path_tok.view(1, 1, -1) == committed_tokens.unsqueeze(-1)
+> return beam_mask & consistent
+> ```
+
+```
+paths = [[0,-1,-1,-1,-1], [0,-1,-1,-1,-1], [0,-1,-1,-1,-1]]
+beam_scores = [-0.3, -0.3, -0.3]
+```
+
+---
+
+##### Step 2: 选位置 → position 2（假设置信度最高）
+
+```
+collect_valid_tokens(beam_mask, position=2):
+  活跃 items a,b,d,e → path_vectors[:, 2] = {2, 2, 8, 8}
+  valid tokens = {2, 8}
+
+decoder lp (mask 后) @ position=2:
+  token 2: -0.4    token 8: -0.2
+
+Beam Expand: (3 beams × 2 valid tokens = 6 候选)
+  cand = score + lp:
+    (beam0, tok=8): -0.3 + (-0.2) = -0.5
+    (beam0, tok=2): -0.3 + (-0.4) = -0.7
+    (beam1, tok=8): -0.3 + (-0.2) = -0.5
+    ...
+
+topk(3):
+  beam 0: tok=8,  score=-0.5
+  beam 1: tok=8,  score=-0.5
+  beam 2: tok=2,  score=-0.7
+```
+
+##### Step 2: filter_beam_paths @ position 2
+
+```
+path_vectors[:, 2] = [2, 2, 5, 8, 8, 12, 17]
+
+beam 0 committed tok=8: consistent = [F, F, F, T, T, F, F]
+  beam_mask[0] = [T,T,F,T,T,F,F] & [F,F,F,T,T,F,F] = [F, F, F, T, T, F, F]
+  → 只剩 item d, e
+
+beam 1 committed tok=8: same as beam 0
+  → 只剩 item d, e
+
+beam 2 committed tok=2: consistent = [T, T, F, F, F, F, F]
+  beam_mask[2] = [T,T,F,T,T,F,F] & [T,T,F,F,F,F,F] = [T, T, F, F, F, F, F]
+  → 只剩 item a, b
+```
+
+```
+paths = [[0,-1,8,-1,-1], [0,-1,8,-1,-1], [0,-1,2,-1,-1]]
+beam_scores = [-0.5, -0.5, -0.7]
+beam_mask:
+  beam 0: [F, F, F, T, T, F, F]  (d, e)
+  beam 1: [F, F, F, T, T, F, F]  (d, e)
+  beam 2: [T, T, F, F, F, F, F]  (a, b)
+```
+
+> **关键观察**：仅经过 2 步 commit，`beam_mask` 已经将 7 个 item 收窄到
+> 只剩 2~3 个候选。这正是路径位图约束的核心优势——每次 commit 都大幅缩小搜索空间。
+
+---
+
+##### Step 3: 选位置 → position 1
+
+```
+collect_valid_tokens(beam_mask, position=1):
+  beam 0 活跃 items d,e → path_vectors[d,e, 1] = {2, 2} → valid = {2}
+  beam 2 活跃 items a,b → path_vectors[a,b, 1] = {1, 1} → valid = {1}
+
+decoder lp @ position=1:
+  beam 0: token 2 = -0.3
+  beam 1: token 2 = -0.3
+  beam 2: token 1 = -0.5
+
+topk(3):
+  beam 0: tok=2, score=-0.5+(-0.3)=-0.8
+  beam 1: tok=2, score=-0.5+(-0.3)=-0.8
+  beam 2: tok=1, score=-0.7+(-0.5)=-1.2
+```
+
+filter 后 beam_mask 不变（活跃 item 在 pos=1 的 token 完全一致）。
+
+```
+paths = [[0,2,8,-1,-1], [0,2,8,-1,-1], [0,1,2,-1,-1]]
+beam_scores = [-0.8, -0.8, -1.2]
+```
+
+---
+
+##### Step 4: 选位置 → position 3
+
+```
+beam 0/1 活跃 items d,e → path_vectors[d,e, 3] = {9, 9} → valid = {9}
+beam 2   活跃 items a,b → path_vectors[a,b, 3] = {3, 3} → valid = {3}
+
+decoder lp @ position=3:
+  beam 0/1: token 9 = -0.2
+  beam 2:   token 3 = -0.4
+
+topk(3):
+  beam 0: tok=9, score=-0.8+(-0.2)=-1.0
+  beam 1: tok=9, score=-0.8+(-0.2)=-1.0
+  beam 2: tok=3, score=-1.2+(-0.4)=-1.6
+```
+
+```
+paths = [[0,2,8,9,-1], [0,2,8,9,-1], [0,1,2,3,-1]]
+beam_scores = [-1.0, -1.0, -1.6]
+```
+
+---
+
+##### Step 5: 选位置 → position 4（最后一个 MASK 位置）
+
+```
+beam 0/1 活跃 items d,e → path_vectors[d,e, 4] = {10, 11} → valid = {10, 11}
+beam 2   活跃 items a,b → path_vectors[a,b, 4] = {4, 4}   → valid = {4}
+
+decoder lp @ position=4:
+  beam 0: token 10=-0.3, token 11=-0.7
+  beam 1: token 10=-0.4, token 11=-0.6
+  beam 2: token 4=-0.5
+
+cand (6 candidates from beam 0/1 × 2 tokens, + beam 2 × 1 token):
+  (beam0, tok=10): -1.0+(-0.3) = -1.3
+  (beam0, tok=11): -1.0+(-0.7) = -1.7
+  (beam1, tok=10): -1.0+(-0.4) = -1.4
+  (beam1, tok=11): -1.0+(-0.6) = -1.6
+  (beam2, tok=4):  -1.6+(-0.5) = -2.1
+
+topk(3):
+  beam 0: tok=10, score=-1.3  (from old beam 0)
+  beam 1: tok=10, score=-1.4  (from old beam 1)
+  beam 2: tok=11, score=-1.6  (from old beam 1)
+```
+
+##### Step 5: filter_beam_paths @ position 4
+
+```
+beam 0 committed tok=10: consistent with d(10)→T, e(11)→F
+  beam_mask[0] = [F,F,F,T,T,F,F] & [F,F,F,T,F,F,F] = [F,F,F,T,F,F,F]
+  → 只剩 item d
+
+beam 1 committed tok=10: same → 只剩 item d
+
+beam 2 committed tok=11: consistent with d(10)→F, e(11)→T
+  beam_mask[2] = [F,F,F,T,T,F,F] & [F,F,F,F,T,F,F] = [F,F,F,F,T,F,F]
+  → 只剩 item e
+```
+
+```
+paths = [[0,2,8,9,10], [0,2,8,9,10], [0,2,8,9,11]]
+beam_scores = [-1.3, -1.4, -1.6]
+beam_mask:
+  beam 0: [F,F,F,T,F,F,F]   → item d
+  beam 1: [F,F,F,T,F,F,F]   → item d
+  beam 2: [F,F,F,F,T,F,F]   → item e
+```
+
+#### Phase 4: Resolve
+
+> **对应代码** (`diffusion/recall.py`):
+>
+> ```python
+> scores_exp = beam_scores.unsqueeze(-1).expand(B, beam, N)
+> scores_masked = scores_exp.masked_fill(~beam_mask, float("-inf"))
+> return scores_masked.max(dim=1).values   # [B, N]
+> ```
+>
+> 无需 `leaf_item_ids` 映射！`beam_mask` 本身就标识了每个 beam 对应的 item。
+
+```
+scores_masked [1, 3, 7]:
+  beam 0: [-inf, -inf, -inf, -1.3, -inf, -inf, -inf]  (item d)
+  beam 1: [-inf, -inf, -inf, -1.4, -inf, -inf, -inf]  (item d)
+  beam 2: [-inf, -inf, -inf, -inf, -1.6, -inf, -inf]  (item e)
+
+max(dim=1) → output [1, 7]:
+  item a: -inf
+  item b: -inf
+  item c: -inf
+  item d: max(-1.3, -1.4) = -1.3   ← 最高分
+  item e: -1.6
+  item f: -inf
+  item g: -inf
+```
+
+> **注意**：本示例中 item a, b 被 beam 2 在 Step 2 时收入候选，但在 Step 5
+> 的全局 topk 中被更高分的 d/e beam 淘汰了。这说明 beam_width=3 在本例不足以
+> 同时保留所有有效路径。增大 beam_width 可以改善。
+
+### 4.5 最终结果
+
+```
+#1  item d (连锁火锅)   score = -1.3
+#2  item e (学生套餐)   score = -1.6
+#3  item a (北京烤鸭)   score = -inf  (被 beam 淘汰)
+#4  item b (全聚德)      score = -inf  (被 beam 淘汰)
+#5  item c              score = -inf  (targeting 过滤)
+#6  item f              score = -inf  (targeting 过滤)
+#7  item g              score = -inf  (targeting 过滤)
+```
+
+### 4.6 AR vs Diffusion 对比总结
+
+| 维度 | AR (§3) | Diffusion (§4) |
+|------|---------|----------------|
+| 离线构建 | 排序 → diff-scan → CSR/Dense（复杂） | 直接堆叠 `path_vectors`（极简） |
+| 在线 Phase 2 | `propagate_validity` 逐层传播（O(S)） | `init_beam_mask` 广播（O(N)） |
+| 解码顺序 | 固定 0→1→2→3→4 | 自适应: 0→2→1→3→4（按置信度） |
+| 每步约束 | dense/CSR 查 Trie 子节点 | `scatter_add` 统计活跃路径的合法 token |
+| 搜索空间 | Trie 分支因子（通常 ≪ V） | 活跃路径的 distinct token（通常也 ≪ V） |
+| Resolve | leaf_state → item 映射（scatter_reduce） | `beam_mask` 直接 max（无映射） |
+| 适用场景 | 大 N（Trie 节点 S ≪ N，内存省）| 中等 N（N ≤ 百万，实现简洁） |
+| Decoder 要求 | 因果注意力（逐步） | 双向注意力（并行输出所有位置） |

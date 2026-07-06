@@ -34,7 +34,8 @@
 |------|------|---------|------|
 | Targeting | 布尔规则匹配 | 精确定向过滤 | 无法排序 |
 | KNN | embedding 内积 | 语义相似度检索 | 表达能力受限于静态 embedding |
-| **Generative** | 自回归解码 | 复杂交互建模 | 需要训练 decoder |
+| **Generative (AR)** | Trie 约束自回归解码 | 复杂交互建模 | 需要训练 decoder；生成顺序固定 |
+| **Generative (Diffusion)** | 路径位图约束并行解码 | 与 AR 互补，生成顺序自适应 | 需要训练双向 decoder |
 
 生成式召回通过自回归模型捕捉用户与 item 之间的复杂交互关系，能力上限高于固定 embedding 的内积匹配。
 
@@ -630,25 +631,41 @@ RecallPipeline
 ## 10. 代码结构
 
 ```
-index/torch_recall/recall_method/generative/
-├── __init__.py         导出 GenerativeRecall, GenerativeBuilder, MockDecoder, Trie
-├── trie.py             Trie: Dense/CSR 混合前缀树，propagation + resolve
-├── builder.py          GenerativeBuilder: 向量化 NumPy 构建
-├── recall.py           GenerativeRecall(RecallOp): beam search 主逻辑
-└── decoder.py          MockDecoder: 测试用 decoder
+index/torch_recall/recall_method/
+├── autoregressive/              ← 自回归生成式召回（Trie 约束）
+│   ├── __init__.py              导出 GenerativeRecall, GenerativeBuilder, MockDecoder, Trie
+│   ├── trie.py                  Trie: Dense/CSR 混合前缀树，propagation + resolve
+│   ├── builder.py               GenerativeBuilder: 向量化 NumPy 构建
+│   ├── recall.py                GenerativeRecall(RecallOp): beam search 主逻辑
+│   └── decoder.py               MockDecoder: 测试用 decoder
+└── diffusion/                   ← 离散扩散生成式召回（路径位图约束）
+    ├── __init__.py              导出 DiffusionRecall, DiffusionBuilder, MockDiffusionDecoder, SidPathFilter
+    ├── path_filter.py           SidPathFilter: 路径位图，init_beam_mask / collect_valid_tokens / filter_beam_paths
+    ├── builder.py               DiffusionBuilder: 从 sid_path 直接构造 path_vectors，无需 Trie
+    ├── recall.py                DiffusionRecall(RecallOp): 自适应顺序解码主逻辑
+    └── model.py                 MockDiffusionDecoder: 测试用双向 decoder
 ```
+
+两个子目录共用：
+
+- `recall_method/base.py` — `RecallOp` 基类（统一 `forward` 接口）
+- `recall_method/targeting/` — `TargetingRecall` + `TargetingBuilder`（两者都在 Phase 1 调用）
 
 ### 各文件职责
 
 | 文件 | 类/函数 | 职责 |
 |------|---------|------|
-| `trie.py` | `Trie` | 存储 Trie 结构（buffers），提供 `propagate_validity` 和 `resolve_leaves` |
-| `builder.py` | `GenerativeBuilder` | 离线构建入口，校验 items，调用 `_build_static_index` |
-| `builder.py` | `_build_static_index` | 纯 NumPy 向量化 Trie 构建（排序、diff-scan、CSR 压缩） |
-| `builder.py` | `_build_leaf_mapping` | 叶子 state → item index 的映射表 |
-| `recall.py` | `GenerativeRecall` | `RecallOp` 实现：targeting + propagation + beam search + resolve |
-| `recall.py` | `_gather_beams` | beam 重排工具函数 |
-| `decoder.py` | `MockDecoder` | 简单线性映射，忽略 partial_paths，用于测试 |
+| `autoregressive/trie.py` | `Trie` | 存储 Trie 结构（buffers），提供 `propagate_validity` 和 `resolve_leaves` |
+| `autoregressive/builder.py` | `GenerativeBuilder` | 离线构建入口，校验 items，调用 `_build_static_index` |
+| `autoregressive/builder.py` | `_build_static_index` | 纯 NumPy 向量化 Trie 构建（排序、diff-scan、CSR 压缩） |
+| `autoregressive/builder.py` | `_build_leaf_mapping` | 叶子 state → item index 的映射表 |
+| `autoregressive/recall.py` | `GenerativeRecall` | `RecallOp` 实现：targeting + propagation + beam search + resolve |
+| `autoregressive/recall.py` | `_gather_beams` | beam 重排工具函数 |
+| `autoregressive/decoder.py` | `MockDecoder` | 简单线性映射，用于测试 |
+| `diffusion/path_filter.py` | `SidPathFilter` | 路径位图核心，3 个操作：`init_beam_mask` / `collect_valid_tokens` / `filter_beam_paths` |
+| `diffusion/builder.py` | `DiffusionBuilder` | 离线构建：`item.sid_path` → `path_vectors [N,L]`，无需 Trie |
+| `diffusion/recall.py` | `DiffusionRecall` | `RecallOp` 实现：targeting + 自适应顺序 L 步解码 + beam_mask resolve |
+| `diffusion/model.py` | `MockDiffusionDecoder` | 并行输出 `[B_beam, L, V]` logits，用于测试 |
 
 ---
 
@@ -659,7 +676,7 @@ index/torch_recall/recall_method/generative/
 ```python
 from torch_recall.schema import Schema, Item
 from torch_recall.scheduler import Generative, PipelineBuilder, encode_pipeline_inputs
-from torch_recall.recall_method.generative.decoder import MockDecoder
+from torch_recall.recall_method.autoregressive.decoder import MockDecoder
 
 # 1. 定义 schema
 schema = Schema(discrete_fields=["city"], numeric_fields=["age"])

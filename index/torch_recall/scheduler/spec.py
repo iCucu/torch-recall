@@ -34,12 +34,15 @@ class KNN(RecallSpec):
 
 
 class Generative(RecallSpec):
-    """Leaf: generative (trie-constrained beam search) recall.
+    """Leaf: autoregressive generative (trie-constrained beam search) recall.
 
     Internally handles targeting for trie pruning. The decoder is an
     external nn.Module with signature::
 
-        forward(user_repr [B*beam, D], partial_paths [B*beam, 5]) -> [B*beam, V] logits
+        forward(user_repr [B*beam, D], partial_paths [B*beam, L]) -> [B*beam, V] logits
+
+    See :class:`diffusion.recall.DiffusionRecall` for the discrete-diffusion
+    variant that uses ``SidPathFilter`` instead of a Trie.
     """
 
     def __init__(

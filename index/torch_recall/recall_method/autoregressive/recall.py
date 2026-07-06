@@ -11,7 +11,7 @@ import torch
 
 from torch_recall.recall_method.base import RecallOp
 from torch_recall.recall_method.targeting.recall import TargetingRecall
-from torch_recall.recall_method.generative.trie import Trie
+from torch_recall.recall_method.autoregressive.trie import Trie
 
 
 def _gather_beams(x: torch.Tensor, beam_idx: torch.Tensor) -> torch.Tensor:

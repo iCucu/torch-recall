@@ -26,7 +26,7 @@ from torch_recall.scheduler import (
     PipelineBuilder,
     encode_pipeline_inputs,
 )
-from torch_recall.recall_method.generative.decoder import MockDecoder
+from torch_recall.recall_method.autoregressive.decoder import MockDecoder
 
 # ── 1. 定义 Schema ──────────────────────────────────────────────────────────
 

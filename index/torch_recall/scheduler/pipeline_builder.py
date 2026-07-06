@@ -114,7 +114,7 @@ class PipelineBuilder:
         total_query_dim = offset if offset > 0 else 0
 
         # --- 3b. build Generative models ---
-        from torch_recall.recall_method.generative.builder import GenerativeBuilder
+        from torch_recall.recall_method.autoregressive.builder import GenerativeBuilder
 
         gen_models: list[tuple[GenerativeSpec, RecallOp]] = []
         gen_meta_list: list[dict] = []
